@@ -22,7 +22,7 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
   unauthorized: { label: "미허가", color: "var(--purple)" },
 };
 
-type Tab = "settlement" | "mapping" | "history";
+type Tab = "settlement" | "contracts" | "mapping" | "history";
 
 export default function SettlementPage() {
   const router = useRouter();
@@ -162,6 +162,7 @@ export default function SettlementPage() {
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "settlement", label: "정산" },
+    { id: "contracts", label: "계약목록" },
     { id: "mapping", label: "교재매핑" },
     { id: "history", label: "정산이력" },
   ];
@@ -225,6 +226,7 @@ export default function SettlementPage() {
             }}
           />
         )}
+        {tab === "contracts" && <ContractsTab />}
         {tab === "mapping" && <MappingTab />}
         {tab === "history" && <HistoryTab />}
       </main>
@@ -462,6 +464,92 @@ function SettlementTab(p: any) {
         </div>
       )}
     </>
+  );
+}
+
+/* ───────────────── 계약목록 탭 (IP LIST CSV 업로드) ───────────────── */
+function ContractsTab() {
+  const [rows, setRows] = useState<any[]>([]);
+  const [csv, setCsv] = useState("");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  function reload() {
+    fetch("/api/contracts").then((r) => r.json()).then((j) => setRows(j.contracts || []));
+  }
+  useEffect(reload, []);
+
+  function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => setCsv(String(r.result || ""));
+    r.readAsText(f, "utf-8");
+  }
+
+  async function importCsv() {
+    setBusy(true);
+    setMsg("");
+    const res = await fetch("/api/contracts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ csv }),
+    });
+    setBusy(false);
+    const j = await res.json().catch(() => ({}));
+    if (res.ok) {
+      setMsg(`계약목록 ${j.count}건 등록 완료`);
+      setCsv("");
+      reload();
+    } else {
+      setMsg(j.error || "등록 실패");
+    }
+  }
+
+  return (
+    <div className="mt-5">
+      <div className="text-[12px] text-[var(--muted)] mb-3">
+        IP LIST(계약목록) 시트를 <b>CSV로 내려받아</b> 붙여넣거나 업로드하세요. 정산의 계약 기준이 됩니다.
+        컬럼 순서: <span className="mono">ISBN, 출판사, 교재명, 단가, 시작일, 종료일</span>. (계약이 바뀔 때만 갱신)
+      </div>
+
+      <div className="rounded-md border border-[var(--border-strong)] p-3 mb-4">
+        <textarea
+          value={csv}
+          onChange={(e) => setCsv(e.target.value)}
+          placeholder="여기에 CSV 내용을 붙여넣기…"
+          className="w-full h-32 border border-[var(--border)] rounded-md p-2 text-[12px] mono outline-none focus:border-[var(--orange)]"
+        />
+        <div className="flex items-center gap-3 mt-2">
+          <input type="file" accept=".csv,text/csv" onChange={onFile} className="text-[12px]" />
+          <button onClick={importCsv} disabled={busy || !csv.trim()}
+            className="rounded-md px-3.5 py-1.5 text-[13px] font-medium bg-[var(--ink)] text-white disabled:opacity-50">
+            {busy ? "등록 중…" : "계약목록 등록"}
+          </button>
+          {msg && <span className="text-[12px] text-[var(--blue)]">{msg}</span>}
+        </div>
+      </div>
+
+      <div className="text-[12px] text-[var(--muted)] mb-2">현재 등록된 계약 교재: {rows.length}건</div>
+      <table className="w-full text-[13px]">
+        <thead>
+          <tr className="text-left text-[var(--muted)] text-[12px] border-b border-[var(--border-strong)]">
+            <Th>출판사</Th><Th>교재명</Th><Th>ISBN</Th><Th className="text-right">단가</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.slice(0, 500).map((r) => (
+            <tr key={r.isbn} className="border-b border-[var(--border)]">
+              <td className="py-2 pr-3 whitespace-nowrap">{r.publisher}</td>
+              <td className="py-2 pr-3">{r.title}</td>
+              <td className="py-2 pr-3 mono text-[12px]">{r.isbn}</td>
+              <td className="py-2 pr-3 text-right mono">{(r.bookPrice || 0).toLocaleString()}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {rows.length > 500 && <div className="text-[11px] text-[var(--muted)] mt-2">… 외 {rows.length - 500}건</div>}
+    </div>
   );
 }
 

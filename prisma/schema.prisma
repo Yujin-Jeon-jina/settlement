@@ -60,3 +60,16 @@ enum MatchStatus {
   unauthorized // 계약에 없는(미허가) 사용분
   unmatched // 아직 매칭되지 않음
 }
+
+/// 계약 교재 마스터 (IP LIST CSV 업로드본). 정산 기준 + 단가(bookPrice).
+model Contract {
+  isbn      String   @id
+  publisher String
+  title     String
+  bookPrice Int      @default(0)
+  startDate String?
+  endDate   String?
+  updatedAt DateTime @updatedAt
+
+  @@index([publisher])
+}
