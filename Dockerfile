@@ -28,5 +28,5 @@ COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/next.config.js ./next.config.js
 COPY --from=build /app/prisma ./prisma
 EXPOSE 3000
-# 배포 시 마이그레이션 적용 후 서버 기동 (Railway가 주입하는 PORT 사용)
-CMD ["sh", "-c", "npx prisma migrate deploy && npm run start -- -p ${PORT:-3000}"]
+# 배포 시 마이그레이션 적용(실패해도 앱은 기동). DATABASE_URL 설정 후 재배포하면 자동 적용.
+CMD ["sh", "-c", "npx prisma migrate deploy || echo 'WARN: DB 마이그레이션 건너뜀 (DATABASE_URL 설정 후 재배포 필요)'; exec npm run start -- -p ${PORT:-3000}"]
