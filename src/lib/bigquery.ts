@@ -1,10 +1,32 @@
 import type { ContractBook, UsageRow } from "./types";
 import { MOCK_CONTRACTS, MOCK_USAGE } from "./mock";
 import { getBigQuery, useMock as gcpUseMock, withRetry } from "./gcp";
+import { canUseRest, runQuery as restQuery, type QueryParam } from "./bqrest";
 
 // 자격증명(서비스계정 또는 본인 OAuth)이 없거나, 프로젝트 ID가 없으면 목업.
 function useMock(): boolean {
   return gcpUseMock() || !process.env.BIGQUERY_PROJECT_ID;
+}
+
+/**
+ * 쿼리 실행. authorized_user(본인 OAuth) 자격증명이 있으면 node https 기반 REST로
+ * 호출(node-fetch 'Premature close' 우회), 아니면 @google-cloud/bigquery 사용.
+ */
+async function execQuery(sql: string, params?: QueryParam[]): Promise<Record<string, unknown>[]> {
+  const projectId = process.env.BIGQUERY_PROJECT_ID!;
+  if (canUseRest()) {
+    return withRetry(() => restQuery(projectId, sql, params));
+  }
+  const libParams: Record<string, string> = {};
+  const libTypes: Record<string, string> = {};
+  (params || []).forEach((p) => {
+    libParams[p.name] = p.value;
+    libTypes[p.name] = p.type;
+  });
+  const [rows] = await withRetry(() =>
+    getBigQuery().query({ query: sql, params: libParams, types: libTypes })
+  );
+  return rows as Record<string, unknown>[];
 }
 
 /**
@@ -67,15 +89,12 @@ export async function fetchUsage(startDate: string, endDate: string): Promise<Us
     ORDER BY publisher, userCount DESC
   `;
 
-  const [rows] = await withRetry(() =>
-    getBigQuery().query({
-      query,
-      params: { START_YYYYMMDD: startDate, END_YYYYMMDD: endDate },
-      types: { START_YYYYMMDD: "DATE", END_YYYYMMDD: "DATE" },
-    })
-  );
+  const rows = await execQuery(query, [
+    { name: "START_YYYYMMDD", type: "DATE", value: startDate },
+    { name: "END_YYYYMMDD", type: "DATE", value: endDate },
+  ]);
 
-  return (rows as Record<string, unknown>[]).map((r) => {
+  return rows.map((r) => {
     const price = r.unitPrice ?? r["단가"];
     return {
       publisher: (r.publisher as string) ?? null,
@@ -123,8 +142,8 @@ export async function fetchContractedBooks(): Promise<ContractBook[]> {
     GROUP BY b.isbn
   `;
 
-  const [rows] = await withRetry(() => getBigQuery().query({ query }));
-  return (rows as Record<string, unknown>[]).map((r) => ({
+  const rows = await execQuery(query);
+  return rows.map((r) => ({
     isbn: String(r.isbn ?? ""),
     title: (r.title as string) ?? "",
     publisher: (r.publisher as string) ?? "",
