@@ -1,8 +1,17 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
+import dns from "dns";
 import { google } from "googleapis";
 import { BigQuery } from "@google-cloud/bigquery";
+
+// 일부 컨테이너 환경(Railway 등)에서 IPv6 경로가 불안정해 googleapis 토큰 요청이
+// "Premature close"로 끊기는 문제 방지 → IPv4 우선.
+try {
+  dns.setDefaultResultOrder?.("ipv4first");
+} catch {
+  /* noop */
+}
 
 /**
  * Google 자격증명 통합 처리.
