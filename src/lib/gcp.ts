@@ -56,6 +56,24 @@ export function getBigQuery(): BigQuery {
   return new BigQuery({ projectId: process.env.BIGQUERY_PROJECT_ID });
 }
 
+const RETRYABLE = /premature close|ECONNRESET|socket hang up|fetch failed|ETIMEDOUT|EAI_AGAIN|network|terminated/i;
+
+/** 일시적 네트워크 오류(특히 oauth 토큰 'Premature close') 시 재시도 */
+export async function withRetry<T>(fn: () => Promise<T>, attempts = 4): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      const msg = String((e as Error)?.message ?? e);
+      if (!RETRYABLE.test(msg) || i === attempts - 1) throw e;
+      await new Promise((r) => setTimeout(r, 400 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 export function getGoogleAuth(scopes: string[]) {
   ensureAdc();
   return new google.auth.GoogleAuth({ scopes });

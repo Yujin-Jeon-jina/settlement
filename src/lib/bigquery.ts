@@ -1,6 +1,6 @@
 import type { ContractBook, UsageRow } from "./types";
 import { MOCK_CONTRACTS, MOCK_USAGE } from "./mock";
-import { getBigQuery, useMock as gcpUseMock } from "./gcp";
+import { getBigQuery, useMock as gcpUseMock, withRetry } from "./gcp";
 
 // 자격증명(서비스계정 또는 본인 OAuth)이 없거나, 프로젝트 ID가 없으면 목업.
 function useMock(): boolean {
@@ -67,12 +67,13 @@ export async function fetchUsage(startDate: string, endDate: string): Promise<Us
     ORDER BY publisher, userCount DESC
   `;
 
-  const bq = getBigQuery();
-  const [rows] = await bq.query({
-    query,
-    params: { START_YYYYMMDD: startDate, END_YYYYMMDD: endDate },
-    types: { START_YYYYMMDD: "DATE", END_YYYYMMDD: "DATE" },
-  });
+  const [rows] = await withRetry(() =>
+    getBigQuery().query({
+      query,
+      params: { START_YYYYMMDD: startDate, END_YYYYMMDD: endDate },
+      types: { START_YYYYMMDD: "DATE", END_YYYYMMDD: "DATE" },
+    })
+  );
 
   return (rows as Record<string, unknown>[]).map((r) => {
     const price = r.unitPrice ?? r["단가"];
@@ -122,8 +123,7 @@ export async function fetchContractedBooks(): Promise<ContractBook[]> {
     GROUP BY b.isbn
   `;
 
-  const bq = getBigQuery();
-  const [rows] = await bq.query({ query });
+  const [rows] = await withRetry(() => getBigQuery().query({ query }));
   return (rows as Record<string, unknown>[]).map((r) => ({
     isbn: String(r.isbn ?? ""),
     title: (r.title as string) ?? "",
