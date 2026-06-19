@@ -1,38 +1,40 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Sidebar from "@/components/Sidebar";
 import type { PublisherSummary, SettlementLineDraft } from "@/lib/types";
 
 const won = (n: number) => n.toLocaleString("ko-KR") + "원";
 
 function defaultMonthRange() {
   const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth(); // 0-based, 이번 달의 이전 달을 기본으로
-  const start = new Date(y, m, 1);
-  const end = new Date(y, m + 1, 0);
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   const fmt = (d: Date) => d.toISOString().slice(0, 10);
   return { start: fmt(start), end: fmt(end) };
 }
 
-const STATUS_META: Record<string, { label: string; cls: string }> = {
-  auto: { label: "자동매칭", cls: "bg-green-100 text-green-700" },
-  confirmed: { label: "확정", cls: "bg-blue-100 text-blue-700" },
-  unmatched: { label: "확인필요", cls: "bg-amber-100 text-amber-700" },
-  unauthorized: { label: "미허가", cls: "bg-gray-200 text-gray-600" },
+const STATUS_META: Record<string, { label: string; color: string }> = {
+  auto: { label: "자동매칭", color: "var(--teal)" },
+  confirmed: { label: "확정", color: "var(--blue)" },
+  unmatched: { label: "확인필요", color: "var(--orange)" },
+  unauthorized: { label: "미허가", color: "var(--purple)" },
 };
+
+type Tab = "settlement" | "mapping" | "history";
 
 export default function SettlementPage() {
   const router = useRouter();
   const def = useMemo(defaultMonthRange, []);
+  const [tab, setTab] = useState<Tab>("settlement");
   const [startDate, setStartDate] = useState(def.start);
   const [endDate, setEndDate] = useState(def.end);
   const [lines, setLines] = useState<SettlementLineDraft[]>([]);
   const [summary, setSummary] = useState<PublisherSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [activePublisher, setActivePublisher] = useState<string>("전체");
+  const [activePublisher, setActivePublisher] = useState("전체");
   const [savedMsg, setSavedMsg] = useState("");
 
   async function load() {
@@ -102,8 +104,7 @@ export default function SettlementPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ startDate, endDate, lines }),
     });
-    if (res.ok) setSavedMsg("정산 이력이 저장되었습니다.");
-    else setSavedMsg("저장 실패 (DB 연결 확인 필요)");
+    setSavedMsg(res.ok ? "정산 이력이 저장되었습니다." : "저장 실패 (DB 연결 확인 필요)");
   }
 
   function exportCsv() {
@@ -140,151 +141,295 @@ export default function SettlementPage() {
   const grandTotal = summary.reduce((a, s) => a + s.totalAmount, 0);
   const needAttention = lines.filter((l) => l.matchStatus === "unmatched").length;
 
+  const TABS: { id: Tab; label: string }[] = [
+    { id: "settlement", label: "정산" },
+    { id: "mapping", label: "교재매핑" },
+    { id: "history", label: "정산이력" },
+  ];
+
   return (
-    <div className="flex min-h-screen">
-      {/* 사이드바 */}
-      <aside className="w-56 bg-[#001529] text-gray-300 flex flex-col">
-        <div className="h-14 flex items-center px-5 text-white font-semibold border-b border-white/10">
-          QandaCX Admin
+    <div className="flex min-h-screen bg-white">
+      <Sidebar />
+      <main className="flex-1 min-w-0 px-8 py-7">
+        {/* 타이틀 + 로그아웃 */}
+        <div className="flex items-start justify-between">
+          <h1 className="page-title">ADJUSTMENT</h1>
+          <button onClick={logout} className="text-[12px] text-[var(--muted)] hover:text-[var(--text)]">
+            로그아웃
+          </button>
         </div>
-        <nav className="flex-1 py-3 text-[13px]">
-          <div className="px-5 py-2 text-gray-500 text-xs">정산</div>
-          <a className="block px-5 py-2 bg-[var(--primary)] text-white">출판사 정산</a>
-        </nav>
-        <button onClick={logout} className="text-left px-5 py-3 text-gray-400 hover:text-white border-t border-white/10">
-          로그아웃
-        </button>
-      </aside>
 
-      {/* 본문 */}
-      <main className="flex-1 flex flex-col">
-        <header className="h-14 bg-white border-b border-[var(--border)] flex items-center px-6 justify-between">
-          <h1 className="font-semibold">출판사 정산</h1>
-          {lines.length > 0 && (
-            <div className="text-[13px] text-[var(--muted)]">
-              전체 합계 <span className="text-[var(--text)] font-semibold">{won(grandTotal)}</span>
-              {needAttention > 0 && (
-                <span className="ml-3 text-amber-600">확인필요 {needAttention}건</span>
-              )}
-            </div>
-          )}
-        </header>
-
-        <div className="p-6 space-y-5">
-          {/* 정산월 선택 */}
-          <section className="bg-white border border-[var(--border)] rounded-lg p-4 flex items-end gap-3">
-            <label className="text-[13px]">
-              <span className="block text-[var(--muted)] mb-1">시작일</span>
-              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
-                className="border border-[var(--border)] rounded-md px-3 py-2" />
-            </label>
-            <label className="text-[13px]">
-              <span className="block text-[var(--muted)] mb-1">종료일</span>
-              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
-                className="border border-[var(--border)] rounded-md px-3 py-2" />
-            </label>
-            <button onClick={load} disabled={loading}
-              className="bg-[var(--primary)] text-white rounded-md px-4 py-2 font-medium disabled:opacity-60">
-              {loading ? "집계 중…" : "사용량 불러오기"}
+        {/* 탭 */}
+        <div className="flex gap-6 mt-5 border-b border-[var(--border)]">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={[
+                "pb-2.5 -mb-px text-[14px]",
+                tab === t.id
+                  ? "text-[var(--ink)] font-semibold border-b-2 border-[var(--teal)]"
+                  : "text-[var(--muted)]",
+              ].join(" ")}
+            >
+              {t.label}
             </button>
-            {lines.length > 0 && (
-              <div className="ml-auto flex gap-2">
-                <button onClick={exportCsv} className="border border-[var(--border)] rounded-md px-4 py-2">CSV 내보내기</button>
-                <button onClick={save} className="border border-[var(--border)] rounded-md px-4 py-2">정산 이력 저장</button>
-              </div>
-            )}
-          </section>
-
-          {error && <div className="bg-red-50 text-red-600 border border-red-200 rounded-md p-3 text-[13px]">{error}</div>}
-          {savedMsg && <div className="bg-blue-50 text-blue-700 border border-blue-200 rounded-md p-3 text-[13px]">{savedMsg}</div>}
-
-          {/* 출판사별 요약 카드 */}
-          {summary.length > 0 && (
-            <section className="grid grid-cols-4 gap-3">
-              {summary.map((s) => (
-                <div key={s.publisher} className="bg-white border border-[var(--border)] rounded-lg p-4">
-                  <div className="text-[var(--muted)] text-[13px]">{s.publisher}</div>
-                  <div className="text-xl font-semibold mt-1">{won(s.totalAmount)}</div>
-                  <div className="text-xs text-[var(--muted)] mt-1">
-                    {s.lineCount}개 교재
-                    {s.unauthorizedAmount > 0 && <span className="ml-2 text-gray-400">미허가 {won(s.unauthorizedAmount)}</span>}
-                  </div>
-                </div>
-              ))}
-            </section>
-          )}
-
-          {/* 라인 테이블 */}
-          {lines.length > 0 && (
-            <section className="bg-white border border-[var(--border)] rounded-lg overflow-hidden">
-              <div className="flex gap-1 border-b border-[var(--border)] px-3 pt-3">
-                {publishers.map((p) => (
-                  <button key={p} onClick={() => setActivePublisher(p)}
-                    className={`px-3 py-2 text-[13px] rounded-t-md ${activePublisher === p ? "bg-[var(--bg)] font-medium" : "text-[var(--muted)]"}`}>
-                    {p}
-                  </button>
-                ))}
-              </div>
-              <table className="w-full text-[13px]">
-                <thead>
-                  <tr className="text-left text-[var(--muted)] border-b border-[var(--border)]">
-                    <th className="px-4 py-2 font-medium">출판사</th>
-                    <th className="px-4 py-2 font-medium">교재 (사용 ISBN)</th>
-                    <th className="px-4 py-2 font-medium text-right">사용자수</th>
-                    <th className="px-4 py-2 font-medium text-right">단가</th>
-                    <th className="px-4 py-2 font-medium text-right">금액</th>
-                    <th className="px-4 py-2 font-medium">매칭</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleLines.map((l) => {
-                    const meta = STATUS_META[l.matchStatus];
-                    return (
-                      <tr key={l.usedIsbn} className="border-b border-[var(--border)] last:border-0 align-top">
-                        <td className="px-4 py-3">{l.publisher}</td>
-                        <td className="px-4 py-3">
-                          <div>{l.bookName}</div>
-                          <div className="text-xs text-[var(--muted)]">{l.usedIsbn}</div>
-                        </td>
-                        <td className="px-4 py-3 text-right">{l.userCount}</td>
-                        <td className="px-4 py-3 text-right">{l.unitPrice ? won(l.unitPrice) : "-"}</td>
-                        <td className="px-4 py-3 text-right font-medium">{l.amount ? won(l.amount) : "-"}</td>
-                        <td className="px-4 py-3">
-                          <span className={`inline-block px-2 py-0.5 rounded text-xs ${meta.cls}`}>{meta.label}</span>
-                          {l.matchStatus === "unmatched" && (
-                            <div className="mt-2 space-y-1">
-                              {l.candidates.length === 0 && (
-                                <div className="text-xs text-[var(--muted)]">추천 후보 없음</div>
-                              )}
-                              {l.candidates.map((c) => (
-                                <button key={c.contractIsbn} onClick={() => confirmMatch(l, c.contractIsbn)}
-                                  className="block w-full text-left border border-[var(--border)] rounded px-2 py-1 hover:border-[var(--primary)]">
-                                  <span className="text-xs">{c.title}</span>
-                                  <span className="text-xs text-[var(--muted)] ml-1">
-                                    · {won(c.bookPrice)} · 유사도 {(c.score * 100).toFixed(0)}%
-                                  </span>
-                                </button>
-                              ))}
-                              <button onClick={() => markUnauthorized(l)}
-                                className="text-xs text-gray-500 underline">미허가 처리</button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </section>
-          )}
-
-          {!loading && lines.length === 0 && !error && (
-            <div className="text-center text-[var(--muted)] py-20 text-[13px]">
-              정산월을 선택하고 “사용량 불러오기”를 누르세요.
-            </div>
-          )}
+          ))}
         </div>
+
+        {tab === "settlement" && (
+          <SettlementTab
+            {...{
+              startDate,
+              endDate,
+              setStartDate,
+              setEndDate,
+              load,
+              loading,
+              error,
+              savedMsg,
+              summary,
+              lines,
+              visibleLines,
+              publishers,
+              activePublisher,
+              setActivePublisher,
+              grandTotal,
+              needAttention,
+              exportCsv,
+              save,
+              confirmMatch,
+              markUnauthorized,
+            }}
+          />
+        )}
+        {tab === "mapping" && <MappingTab />}
+        {tab === "history" && <HistoryTab />}
       </main>
+    </div>
+  );
+}
+
+/* ───────────────── 정산 탭 ───────────────── */
+function SettlementTab(p: any) {
+  return (
+    <>
+      {/* 요약 한 줄 */}
+      <div className="mt-4 text-[12px] text-[var(--muted)]">
+        {p.lines.length > 0 ? (
+          <>
+            전체 합계 <b className="text-[var(--ink)]">{won(p.grandTotal)}</b>
+            {" · "}교재 {p.lines.length}건
+            {p.needAttention > 0 && (
+              <span className="text-[var(--orange)]"> · 확인필요 {p.needAttention}건</span>
+            )}
+          </>
+        ) : (
+          "정산월을 선택하고 사용량을 불러오세요."
+        )}
+      </div>
+
+      {/* 정산월 + 액션 */}
+      <div className="flex items-center gap-2 mt-3">
+        <input type="date" value={p.startDate} onChange={(e: any) => p.setStartDate(e.target.value)}
+          className="border border-[var(--border-strong)] rounded-md px-2.5 py-1.5 text-[13px]" />
+        <span className="text-[var(--muted)]">~</span>
+        <input type="date" value={p.endDate} onChange={(e: any) => p.setEndDate(e.target.value)}
+          className="border border-[var(--border-strong)] rounded-md px-2.5 py-1.5 text-[13px]" />
+        <button onClick={p.load} disabled={p.loading}
+          className="rounded-md px-3.5 py-1.5 text-[13px] font-medium bg-[var(--ink)] text-white disabled:opacity-60">
+          {p.loading ? "집계 중…" : "사용량 불러오기"}
+        </button>
+        {p.lines.length > 0 && (
+          <div className="ml-auto flex items-center gap-2">
+            <button onClick={p.save}
+              className="rounded-md px-3 py-1.5 text-[13px] border border-[var(--border-strong)] text-[var(--text)]">
+              이력 저장
+            </button>
+            <button onClick={p.exportCsv} className="text-[13px] text-[var(--blue)] font-medium">⬇ CSV</button>
+          </div>
+        )}
+      </div>
+
+      {p.error && <Banner color="var(--red)">{p.error}</Banner>}
+      {p.savedMsg && <Banner color="var(--blue)">{p.savedMsg}</Banner>}
+
+      {/* 출판사 필터 pill */}
+      {p.summary.length > 0 && (
+        <div className="flex flex-wrap gap-2 mt-5">
+          {p.publishers.map((pub: string) => {
+            const s = p.summary.find((x: PublisherSummary) => x.publisher === pub);
+            const count = pub === "전체" ? p.lines.length : s?.lineCount ?? 0;
+            const active = p.activePublisher === pub;
+            return (
+              <button key={pub} onClick={() => p.setActivePublisher(pub)}
+                className={[
+                  "rounded-full px-3 py-1 text-[12px] font-medium",
+                  active ? "bg-[var(--ink)] text-white" : "bg-[#f3f4f6] text-[#6b7280]",
+                ].join(" ")}>
+                {pub} {count}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 테이블 */}
+      {p.lines.length > 0 && (
+        <div className="mt-4">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="text-left text-[var(--muted)] text-[12px] border-b border-[var(--border-strong)]">
+                <Th>출판사</Th>
+                <Th>교재 / 사용 ISBN</Th>
+                <Th className="text-right">사용자수</Th>
+                <Th className="text-right">단가</Th>
+                <Th className="text-right">금액</Th>
+                <Th>매칭 / 액션</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {p.visibleLines.map((l: SettlementLineDraft) => {
+                const meta = STATUS_META[l.matchStatus];
+                return (
+                  <tr key={l.usedIsbn} className="border-b border-[var(--border)] align-top">
+                    <td className="py-3 pr-3">{l.publisher}</td>
+                    <td className="py-3 pr-3">
+                      <div className="text-[var(--text)]">{l.bookName}</div>
+                      <div className="mono text-[11px] text-[var(--muted)]">{l.usedIsbn}</div>
+                    </td>
+                    <td className="py-3 pr-3 text-right mono">{l.userCount}</td>
+                    <td className="py-3 pr-3 text-right mono">{l.unitPrice ? l.unitPrice.toLocaleString() : "-"}</td>
+                    <td className="py-3 pr-3 text-right mono font-semibold text-[var(--ink)]">
+                      {l.amount ? l.amount.toLocaleString() : "-"}
+                    </td>
+                    <td className="py-3">
+                      <span className="text-[12px] font-medium" style={{ color: meta.color }}>
+                        ● {meta.label}
+                      </span>
+                      {l.matchStatus === "unmatched" && (
+                        <div className="mt-2 space-y-1 max-w-[420px]">
+                          {l.candidates.length === 0 && (
+                            <div className="text-[12px] text-[var(--muted)]">추천 후보 없음 — 미허가 처리 가능</div>
+                          )}
+                          {l.candidates.map((c) => (
+                            <button key={c.contractIsbn} onClick={() => p.confirmMatch(l, c.contractIsbn)}
+                              className="block w-full text-left border border-[var(--border-strong)] rounded-md px-2.5 py-1.5 hover:border-[var(--orange)]">
+                              <span className="text-[12px]">{c.title}</span>
+                              <span className="mono text-[11px] text-[var(--muted)] ml-1">
+                                · {c.bookPrice.toLocaleString()}원 · 유사도 {(c.score * 100).toFixed(0)}%
+                              </span>
+                            </button>
+                          ))}
+                          <button onClick={() => p.markUnauthorized(l)}
+                            className="text-[11px] text-[var(--purple)] underline">미허가 처리</button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div className="text-[12px] text-[var(--muted)] mt-4">총 {p.visibleLines.length}건</div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/* ───────────────── 교재매핑 탭 ───────────────── */
+function MappingTab() {
+  const [rows, setRows] = useState<any[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    fetch("/api/mappings").then((r) => r.json()).then((j) => {
+      setRows(j.mappings || []);
+      setLoaded(true);
+    });
+  }, []);
+  async function remove(usedIsbn: string) {
+    await fetch(`/api/mappings?usedIsbn=${encodeURIComponent(usedIsbn)}`, { method: "DELETE" });
+    setRows((prev) => prev.filter((r) => r.usedIsbn !== usedIsbn));
+  }
+  return (
+    <div className="mt-5">
+      <div className="text-[12px] text-[var(--muted)] mb-3">
+        확정한 사용 ISBN ↔ 계약 교재 매핑. 저장된 매핑은 다음 달 정산에 자동 적용됩니다.
+      </div>
+      <table className="w-full text-[13px]">
+        <thead>
+          <tr className="text-left text-[var(--muted)] text-[12px] border-b border-[var(--border-strong)]">
+            <Th>출판사</Th><Th>교재명</Th><Th>사용 ISBN</Th><Th>계약 ISBN</Th><Th>상태</Th><Th></Th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.usedIsbn} className="border-b border-[var(--border)]">
+              <td className="py-3 pr-3">{r.publisher}</td>
+              <td className="py-3 pr-3">{r.bookName}</td>
+              <td className="py-3 pr-3 mono text-[12px]">{r.usedIsbn}</td>
+              <td className="py-3 pr-3 mono text-[12px]">{r.contractIsbn || "-"}</td>
+              <td className="py-3 pr-3 text-[12px]">{r.status === "unauthorized" ? "미허가" : "확정"}</td>
+              <td className="py-3"><button onClick={() => remove(r.usedIsbn)} className="text-[12px] text-[var(--muted)] hover:text-[var(--red)]">삭제</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {loaded && rows.length === 0 && (
+        <div className="text-center text-[var(--muted)] py-16 text-[13px]">저장된 매핑이 없습니다.</div>
+      )}
+    </div>
+  );
+}
+
+/* ───────────────── 정산이력 탭 ───────────────── */
+function HistoryTab() {
+  const [runs, setRuns] = useState<any[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    fetch("/api/settlement").then((r) => r.json()).then((j) => {
+      setRuns(j.runs || []);
+      setLoaded(true);
+    });
+  }, []);
+  return (
+    <div className="mt-5">
+      <table className="w-full text-[13px]">
+        <thead>
+          <tr className="text-left text-[var(--muted)] text-[12px] border-b border-[var(--border-strong)]">
+            <Th>정산기간</Th><Th>상태</Th><Th className="text-right">라인수</Th><Th>생성일시</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {runs.map((r) => (
+            <tr key={r.id} className="border-b border-[var(--border)]">
+              <td className="py-3 pr-3 mono text-[12px]">
+                {String(r.periodStart).slice(0, 10)} ~ {String(r.periodEnd).slice(0, 10)}
+              </td>
+              <td className="py-3 pr-3 text-[12px]" style={{ color: "var(--teal)" }}>{r.status}</td>
+              <td className="py-3 pr-3 text-right mono">{r._count?.lines ?? "-"}</td>
+              <td className="py-3 pr-3 mono text-[12px]">{String(r.createdAt).slice(0, 19).replace("T", " ")}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {loaded && runs.length === 0 && (
+        <div className="text-center text-[var(--muted)] py-16 text-[13px]">저장된 정산 이력이 없습니다.</div>
+      )}
+    </div>
+  );
+}
+
+/* ───────────────── 공용 ───────────────── */
+function Th({ children, className = "" }: { children?: React.ReactNode; className?: string }) {
+  return <th className={`py-2 pr-3 font-medium ${className}`}>{children}</th>;
+}
+function Banner({ children, color }: { children: React.ReactNode; color: string }) {
+  return (
+    <div className="mt-3 rounded-md px-3 py-2 text-[12px]"
+      style={{ color, background: "color-mix(in srgb, " + color + " 8%, white)", border: `1px solid color-mix(in srgb, ${color} 25%, white)` }}>
+      {children}
     </div>
   );
 }
