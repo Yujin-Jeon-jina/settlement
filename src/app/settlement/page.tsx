@@ -350,43 +350,55 @@ function SettlementTab(p: any) {
             <thead>
               <tr className="text-left text-[var(--muted)] text-[12px] border-b border-[var(--border-strong)]">
                 <Th>출판사</Th>
-                <Th>교재 / 사용 ISBN</Th>
+                <Th>사용 교재 (실제 사용)</Th>
+                <Th>계약 교재 (매칭 대상)</Th>
                 <Th className="text-right">사용자수</Th>
                 <Th className="text-right">단가</Th>
                 <Th className="text-right">금액</Th>
-                <Th>매칭 / 액션</Th>
               </tr>
             </thead>
             <tbody>
               {p.visibleLines.map((l: SettlementLineDraft) => {
                 const meta = STATUS_META[l.matchStatus];
+                const matched = l.matchStatus === "auto" || l.matchStatus === "confirmed";
                 return (
                   <tr key={l.usedIsbn} className="border-b border-[var(--border)] align-top">
-                    <td className="py-3 pr-3">{l.publisher}</td>
-                    <td className="py-3 pr-3">
+                    <td className="py-3 pr-3 whitespace-nowrap">{l.publisher}</td>
+
+                    {/* 사용 교재 */}
+                    <td className="py-3 pr-3 max-w-[320px]">
                       <div className="text-[var(--text)]">{l.bookName}</div>
                       <div className="mono text-[11px] text-[var(--muted)]">{l.usedIsbn}</div>
                     </td>
-                    <td className="py-3 pr-3 text-right mono">{l.userCount}</td>
-                    <td className="py-3 pr-3 text-right mono">{l.unitPrice ? l.unitPrice.toLocaleString() : "-"}</td>
-                    <td className="py-3 pr-3 text-right mono font-semibold text-[var(--ink)]">
-                      {l.amount ? l.amount.toLocaleString() : "-"}
-                    </td>
-                    <td className="py-3">
-                      <span className="text-[12px] font-medium" style={{ color: meta.color }}>
+
+                    {/* 계약 교재 / 매칭 */}
+                    <td className="py-3 pr-3 max-w-[380px]">
+                      <span className="inline-block text-[11px] font-medium mb-1" style={{ color: meta.color }}>
                         ● {meta.label}
                       </span>
+
+                      {matched && (
+                        <>
+                          <div className="text-[var(--text)]">{l.contractBookName || "(이름 없음)"}</div>
+                          <div className="mono text-[11px] text-[var(--muted)]">{l.contractIsbn}</div>
+                        </>
+                      )}
+
+                      {l.matchStatus === "unauthorized" && (
+                        <div className="text-[12px] text-[var(--muted)]">미허가 처리됨 (정산 제외)</div>
+                      )}
+
                       {l.matchStatus === "unmatched" && (
-                        <div className="mt-2 space-y-1 max-w-[420px]">
+                        <div className="space-y-1">
                           {l.contractStatus && (
                             <div className="text-[11px] text-[var(--muted)]">
-                              계약상태: <span className="mono">{l.contractStatus}</span>
+                              계약상태 <span className="mono">{l.contractStatus}</span>
                               {l.contractStatus === "EXPIRED" && " (계약 종료)"}
                               {l.contractStatus === "DENIED" && " (미승인)"}
                             </div>
                           )}
                           {l.candidates.length === 0 && (
-                            <div className="text-[12px] text-[var(--muted)]">추천 후보 없음 — 미허가 처리 가능</div>
+                            <div className="text-[12px] text-[var(--muted)]">추천 후보 없음</div>
                           )}
                           {l.candidates.map((c) => (
                             <button key={c.contractIsbn} onClick={() => p.confirmMatch(l, c.contractIsbn)}
@@ -401,6 +413,12 @@ function SettlementTab(p: any) {
                             className="text-[11px] text-[var(--purple)] underline">미허가 처리</button>
                         </div>
                       )}
+                    </td>
+
+                    <td className="py-3 pr-3 text-right mono">{l.userCount}</td>
+                    <td className="py-3 pr-3 text-right mono">{l.unitPrice ? l.unitPrice.toLocaleString() : "-"}</td>
+                    <td className="py-3 pr-3 text-right mono font-semibold text-[var(--ink)]">
+                      {l.amount ? l.amount.toLocaleString() : "-"}
                     </td>
                   </tr>
                 );

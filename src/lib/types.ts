@@ -45,6 +45,7 @@ export interface SettlementLineDraft {
   amount: number; // userCount * unitPrice
   candidates: MatchCandidate[]; // 미확정 시 추천 후보
   contractStatus?: string | null; // book_contracts.status (ALLOWED/DENIED/EXPIRED/null)
+  contractBookName?: string | null; // 매칭된 계약 교재명 (사용 교재명과 대조용)
 }
 
 export interface PublisherSummary {

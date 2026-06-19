@@ -49,6 +49,7 @@ export function buildSettlementDraft(
         ...base,
         matchStatus: "confirmed",
         contractIsbn: saved.contractIsbn,
+        contractBookName: c?.title ?? null,
         unitPrice: price,
         amount: price * u.userCount,
         candidates: [],
@@ -58,11 +59,13 @@ export function buildSettlementDraft(
     // 2) book_contracts status가 승인(ALLOWED) → 자동 정산, 단가 = consumer_price
     const statusUpper = (u.status || "").toUpperCase();
     if (active.has(statusUpper)) {
-      const price = u.unitPrice ?? contractByIsbn.get(u.usedIsbn)?.bookPrice ?? 0;
+      const c = contractByIsbn.get(u.usedIsbn);
+      const price = u.unitPrice ?? c?.bookPrice ?? 0;
       return {
         ...base,
         matchStatus: "auto",
         contractIsbn: u.usedIsbn,
+        contractBookName: c?.title ?? null,
         unitPrice: price,
         amount: price * u.userCount,
         candidates: [],
@@ -77,6 +80,7 @@ export function buildSettlementDraft(
         ...base,
         matchStatus: "auto",
         contractIsbn: exact.isbn,
+        contractBookName: exact.title ?? null,
         unitPrice: price,
         amount: price * u.userCount,
         candidates: [],
