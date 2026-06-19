@@ -49,7 +49,7 @@ export async function upsertContract(c: {
 }
 
 /** RFC4180 유사 CSV 파서 (따옴표·내부 콤마 처리) */
-function parseCsv(text: string): string[][] {
+export function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";

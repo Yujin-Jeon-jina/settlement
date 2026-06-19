@@ -1,5 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { importMappingsFromCsv } from "@/lib/mappings";
+
+/** 매핑 CSV 일괄 임포트 (사용ISBN, 계약ISBN, [출판사], [교재명]) */
+export async function PUT(req: NextRequest) {
+  const { csv } = (await req.json().catch(() => ({}))) as { csv?: string };
+  if (!csv || !csv.trim()) {
+    return NextResponse.json({ error: "csv 내용이 비어 있습니다." }, { status: 400 });
+  }
+  try {
+    const { count } = await importMappingsFromCsv(csv);
+    return NextResponse.json({ ok: true, count });
+  } catch (e) {
+    return NextResponse.json({ error: String(e) }, { status: 500 });
+  }
+}
 
 export async function GET() {
   try {

@@ -618,12 +618,42 @@ function ContractsTab() {
 function MappingTab() {
   const [rows, setRows] = useState<any[]>([]);
   const [loaded, setLoaded] = useState(false);
-  useEffect(() => {
+  const [csv, setCsv] = useState("");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  function reload() {
     fetch("/api/mappings").then((r) => r.json()).then((j) => {
       setRows(j.mappings || []);
       setLoaded(true);
     });
-  }, []);
+  }
+  useEffect(reload, []);
+
+  function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => setCsv(String(r.result || ""));
+    r.readAsText(f, "utf-8");
+  }
+  async function importCsv() {
+    setBusy(true);
+    setMsg("");
+    const res = await fetch("/api/mappings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ csv }),
+    });
+    setBusy(false);
+    const j = await res.json().catch(() => ({}));
+    if (res.ok) {
+      setMsg(`매핑 ${j.count}건 등록 완료`);
+      setCsv("");
+      reload();
+    } else setMsg(j.error || "등록 실패");
+  }
+
   async function remove(usedIsbn: string) {
     await fetch(`/api/mappings?usedIsbn=${encodeURIComponent(usedIsbn)}`, { method: "DELETE" });
     setRows((prev) => prev.filter((r) => r.usedIsbn !== usedIsbn));
@@ -633,6 +663,26 @@ function MappingTab() {
       <div className="text-[12px] text-[var(--muted)] mb-3">
         확정한 사용 ISBN ↔ 계약 교재 매핑. 저장된 매핑은 다음 달 정산에 자동 적용됩니다.
       </div>
+
+      {/* 기존 bookips 매핑 CSV 임포트 */}
+      <div className="rounded-md border border-[var(--border-strong)] p-3 mb-4">
+        <div className="text-[12px] text-[var(--muted)] mb-2">
+          기존 매핑(bookips 등)을 CSV로 한 번에 등록 → 과거 구판/개정판 연결이 자동 적용됩니다.
+          컬럼 순서: <span className="mono">사용ISBN, 계약ISBN, (출판사), (교재명)</span>
+        </div>
+        <textarea value={csv} onChange={(e) => setCsv(e.target.value)} placeholder="사용ISBN,계약ISBN,... 붙여넣기…"
+          className="w-full h-24 border border-[var(--border)] rounded-md p-2 text-[12px] mono outline-none focus:border-[var(--orange)]" />
+        <div className="flex items-center gap-3 mt-2">
+          <input type="file" accept=".csv,text/csv" onChange={onFile} className="text-[12px]" />
+          <button onClick={importCsv} disabled={busy || !csv.trim()}
+            className="rounded-md px-3.5 py-1.5 text-[13px] font-medium bg-[var(--ink)] text-white disabled:opacity-50">
+            {busy ? "등록 중…" : "매핑 일괄 등록"}
+          </button>
+          {msg && <span className="text-[12px] text-[var(--blue)]">{msg}</span>}
+        </div>
+      </div>
+
+      <div className="text-[12px] text-[var(--muted)] mb-2">등록된 매핑: {rows.length}건</div>
       <table className="w-full text-[13px]">
         <thead>
           <tr className="text-left text-[var(--muted)] text-[12px] border-b border-[var(--border-strong)]">
