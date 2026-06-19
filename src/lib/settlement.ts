@@ -36,7 +36,7 @@ export function buildSettlementDraft(
         return { ...base, matchStatus: "unauthorized", contractIsbn: null, unitPrice: 0, amount: 0, candidates: [] };
       }
       const c = saved.contractIsbn ? contractByIsbn.get(saved.contractIsbn) : undefined;
-      const price = c?.bookPrice ?? 0;
+      const price = u.unitPrice ?? c?.bookPrice ?? 0;
       return {
         ...base,
         matchStatus: "confirmed",
@@ -47,15 +47,16 @@ export function buildSettlementDraft(
       };
     }
 
-    // 2) ISBN 정확 일치
+    // 2) ISBN 정확 일치 (단가: BigQuery가 주면 우선, 없으면 계약 bookPrice)
     const exact = contractByIsbn.get(u.usedIsbn);
     if (exact) {
+      const price = u.unitPrice ?? exact.bookPrice;
       return {
         ...base,
         matchStatus: "auto",
         contractIsbn: exact.isbn,
-        unitPrice: exact.bookPrice,
-        amount: exact.bookPrice * u.userCount,
+        unitPrice: price,
+        amount: price * u.userCount,
         candidates: [],
       };
     }

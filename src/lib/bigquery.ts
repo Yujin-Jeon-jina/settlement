@@ -83,10 +83,14 @@ export async function fetchUsage(startDate: string, endDate: string): Promise<Us
     types: { START_YYYYMMDD: "DATE", END_YYYYMMDD: "DATE" },
   });
 
-  return (rows as Record<string, unknown>[]).map((r) => ({
-    publisher: (r.publisher as string) ?? null,
-    usedIsbn: String(r.usedIsbn ?? ""),
-    bookName: (r.bookName as string) ?? null,
-    userCount: Number(r.userCount ?? 0),
-  }));
+  return (rows as Record<string, unknown>[]).map((r) => {
+    const price = r["단가"] ?? r.unitPrice;
+    return {
+      publisher: (r.publisher as string) ?? null,
+      usedIsbn: String(r.usedIsbn ?? ""),
+      bookName: (r.bookName as string) ?? null,
+      userCount: Number(r.userCount ?? 0),
+      unitPrice: price == null ? null : Number(price),
+    };
+  });
 }

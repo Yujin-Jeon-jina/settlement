@@ -8,6 +8,8 @@ export interface UsageRow {
   usedIsbn: string;
   bookName: string | null;
   userCount: number;
+  /** (선택) BigQuery 쿼리가 단가를 함께 반환하면 사용. 없으면 계약 bookPrice 사용. */
+  unitPrice?: number | null;
 }
 
 /** 계약 교재 마스터 (계약 목록 시트 1행) */
