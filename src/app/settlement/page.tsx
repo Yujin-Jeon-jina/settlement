@@ -31,7 +31,6 @@ export default function SettlementPage() {
   const [startDate, setStartDate] = useState(def.start);
   const [endDate, setEndDate] = useState(def.end);
   const [lines, setLines] = useState<SettlementLineDraft[]>([]);
-  const [summary, setSummary] = useState<PublisherSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [activePublisher, setActivePublisher] = useState("전체");
@@ -66,7 +65,6 @@ export default function SettlementPage() {
     }
     const j = await res.json();
     setLines(j.lines);
-    setSummary(j.summary);
     setActivePublisher("전체");
   }
 
@@ -206,6 +204,19 @@ export default function SettlementPage() {
     router.refresh();
   }
 
+  // 출판사별 요약은 현재 lines에서 실시간 계산 (매칭/확정 시 즉시 갱신)
+  const summary: PublisherSummary[] = useMemo(() => {
+    const m = new Map<string, PublisherSummary>();
+    for (const l of lines) {
+      const s = m.get(l.publisher) ?? { publisher: l.publisher, totalAmount: 0, lineCount: 0, unauthorizedAmount: 0 };
+      s.lineCount += 1;
+      s.totalAmount += l.amount;
+      if (l.matchStatus === "unauthorized" || l.matchStatus === "unmatched") s.unauthorizedAmount += 1;
+      m.set(l.publisher, s);
+    }
+    return Array.from(m.values()).sort((a, b) => b.totalAmount - a.totalAmount);
+  }, [lines]);
+
   const publishers = ["전체", ...summary.map((s) => s.publisher)];
   const visibleLines =
     activePublisher === "전체" ? lines : lines.filter((l) => l.publisher === activePublisher);
@@ -328,10 +339,6 @@ function SettlementTab(p: any) {
         </button>
         {p.lines.length > 0 && (
           <div className="ml-auto flex items-center gap-2">
-            <button onClick={p.runVerify} disabled={p.verifying}
-              className="rounded-md px-3 py-1.5 text-[13px] border border-[var(--border-strong)] text-[var(--text)] disabled:opacity-60">
-              {p.verifying ? "대조 중…" : "피벗 대조"}
-            </button>
             <button onClick={p.save}
               className="rounded-md px-3 py-1.5 text-[13px] border border-[var(--border-strong)] text-[var(--text)]">
               이력 저장
@@ -340,49 +347,6 @@ function SettlementTab(p: any) {
           </div>
         )}
       </div>
-
-      {/* 피벗 대조 결과 */}
-      {p.verify && !p.verify.error && (
-        <div className="mt-3 rounded-md border border-[var(--border-strong)] p-3">
-          <div className="text-[13px]">
-            피벗 대조:{" "}
-            <b style={{ color: p.verify.summary.mismatched === 0 ? "var(--teal)" : "var(--orange)" }}>
-              {p.verify.summary.matched}/{p.verify.summary.total} 일치
-            </b>
-            {p.verify.summary.mismatched > 0 && (
-              <span className="text-[var(--orange)]"> · 불일치 {p.verify.summary.mismatched}건</span>
-            )}
-            <span className="text-[var(--muted)]">
-              {" "}· BQ 사용자합 {p.verify.summary.bqTotalUsers} / 피벗 {p.verify.summary.pivotTotalUsers}
-            </span>
-          </div>
-          {p.verify.summary.mismatched > 0 && (
-            <table className="w-full text-[12px] mt-2">
-              <thead>
-                <tr className="text-left text-[var(--muted)] border-b border-[var(--border)]">
-                  <th className="py-1 pr-3 font-medium">출판사</th>
-                  <th className="py-1 pr-3 font-medium">교재 / ISBN</th>
-                  <th className="py-1 pr-3 font-medium text-right">BQ</th>
-                  <th className="py-1 pr-3 font-medium text-right">피벗</th>
-                </tr>
-              </thead>
-              <tbody>
-                {p.verify.rows.filter((r: any) => !r.match).map((r: any) => (
-                  <tr key={r.usedIsbn} className="border-b border-[var(--border)]">
-                    <td className="py-1.5 pr-3">{r.publisher}</td>
-                    <td className="py-1.5 pr-3">
-                      {r.bookName} <span className="mono text-[11px] text-[var(--muted)]">{r.usedIsbn}</span>
-                    </td>
-                    <td className="py-1.5 pr-3 text-right mono">{r.bqCount ?? "—"}</td>
-                    <td className="py-1.5 pr-3 text-right mono">{r.pivotCount ?? "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
-      {p.verify?.error && <Banner color="var(--red)">{p.verify.error}</Banner>}
 
       {p.error && <Banner color="var(--red)">{p.error}</Banner>}
       {p.savedMsg && <Banner color="var(--blue)">{p.savedMsg}</Banner>}

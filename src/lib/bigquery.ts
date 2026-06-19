@@ -47,7 +47,7 @@ const DEFAULT_BASE_SQL = `
       WHEN b.publisher LIKE '%지학사%' THEN '지학사'
       WHEN b.publisher LIKE '%키출판사%' THEN '키출판사'
       WHEN b.publisher LIKE '%마더텅%' THEN '마더텅'
-      WHEN b.publisher LIKE '%수경출판%' THEN '수경출판사'
+      -- 수경출판사는 현재 정산 대상에서 제외 (추후 추가 시: WHEN b.publisher LIKE '%수경출판%' THEN '수경출판사')
     END AS publisher
   FROM (
     SELECT
