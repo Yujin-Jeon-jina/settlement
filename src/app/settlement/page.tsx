@@ -172,7 +172,7 @@ export default function SettlementPage() {
       <main className="flex-1 min-w-0 px-8 py-7">
         {/* 타이틀 + 로그아웃 */}
         <div className="flex items-start justify-between">
-          <h1 className="page-title">ADJUSTMENT</h1>
+          <h1 className="page-title">COPYRIGHT</h1>
           <button onClick={logout} className="text-[12px] text-[var(--muted)] hover:text-[var(--text)]">
             로그아웃
           </button>

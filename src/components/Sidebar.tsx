@@ -47,7 +47,7 @@ const GROUPS: Group[] = [
       { label: "Device", icon: Monitor },
       { label: "Matching", icon: Share2 },
       { label: "Tutor", icon: GraduationCap },
-      { label: "Adjustment", icon: SlidersHorizontal, active: true },
+      { label: "Copyright", icon: SlidersHorizontal, active: true },
       { label: "Lesson", icon: ListMusic },
       { label: "Chat", icon: MessageCircle },
     ],
