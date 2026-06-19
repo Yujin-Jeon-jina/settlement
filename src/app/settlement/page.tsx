@@ -378,6 +378,13 @@ function SettlementTab(p: any) {
                       </span>
                       {l.matchStatus === "unmatched" && (
                         <div className="mt-2 space-y-1 max-w-[420px]">
+                          {l.contractStatus && (
+                            <div className="text-[11px] text-[var(--muted)]">
+                              계약상태: <span className="mono">{l.contractStatus}</span>
+                              {l.contractStatus === "EXPIRED" && " (계약 종료)"}
+                              {l.contractStatus === "DENIED" && " (미승인)"}
+                            </div>
+                          )}
                           {l.candidates.length === 0 && (
                             <div className="text-[12px] text-[var(--muted)]">추천 후보 없음 — 미허가 처리 가능</div>
                           )}

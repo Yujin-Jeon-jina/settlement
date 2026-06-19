@@ -8,8 +8,10 @@ export interface UsageRow {
   usedIsbn: string;
   bookName: string | null;
   userCount: number;
-  /** (선택) BigQuery 쿼리가 단가를 함께 반환하면 사용. 없으면 계약 bookPrice 사용. */
+  /** book_contracts.consumer_price (=단가). 없으면 계약 bookPrice로 폴백. */
   unitPrice?: number | null;
+  /** book_contracts.status (ALLOWED=승인, DENIED/EXPIRED=미승인, null=계약행 없음) */
+  status?: string | null;
 }
 
 /** 계약 교재 마스터 (계약 목록 시트 1행) */
@@ -39,9 +41,10 @@ export interface SettlementLineDraft {
   userCount: number;
   matchStatus: MatchStatus;
   contractIsbn: string | null;
-  unitPrice: number; // 계약 bookPrice
+  unitPrice: number; // consumer_price 또는 계약 bookPrice
   amount: number; // userCount * unitPrice
   candidates: MatchCandidate[]; // 미확정 시 추천 후보
+  contractStatus?: string | null; // book_contracts.status (ALLOWED/DENIED/EXPIRED/null)
 }
 
 export interface PublisherSummary {

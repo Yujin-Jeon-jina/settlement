@@ -33,6 +33,8 @@ function client(): BigQuery {
 const DEFAULT_BASE_SQL = `
   SELECT
     l.*,
+    c.status AS status,
+    c.consumer_price AS consumerPrice,
     CASE
       WHEN b.publisher LIKE '%NE능률%' THEN 'NE능률'
       WHEN b.publisher LIKE '%개념원리%' THEN '개념원리'
@@ -52,6 +54,7 @@ const DEFAULT_BASE_SQL = `
     FROM \`mathpresso-data.qanda_rds_live.bookips_usage_logs\`
   ) l
   LEFT JOIN \`mathpresso-data.qanda_rds_live.books\` b ON l.isbn = b.isbn
+  LEFT JOIN \`mathpresso-data.qanda_rds_live.book_contracts\` c ON l.isbn = c.isbn
   WHERE COALESCE(l.registeredAt, l.deletedAt) >= @START_YYYYMMDD
     AND COALESCE(l.registeredAt, l.deletedAt) < DATE_ADD(@END_YYYYMMDD, INTERVAL 1 DAY)
 `;
@@ -62,14 +65,17 @@ export async function fetchUsage(startDate: string, endDate: string): Promise<Us
 
   const baseSql = process.env.BIGQUERY_USAGE_SQL || DEFAULT_BASE_SQL;
 
-  // 시트의 Pivot(= publisher+isbn 그룹 / COUNTUNIQUE(userHash))을 SQL 집계로 재현.
+  // 시트의 Pivot(= publisher+isbn 그룹 / COUNTUNIQUE(userHash) / MAX(단가))을 SQL 집계로 재현.
+  // status는 ALLOWED가 하나라도 있으면 ALLOWED로, 없으면 대표값으로.
   const query = `
     WITH base AS (${baseSql})
     SELECT
       publisher,
       isbn AS usedIsbn,
       ANY_VALUE(bookTitle) AS bookName,
-      COUNT(DISTINCT userHash) AS userCount
+      COUNT(DISTINCT userHash) AS userCount,
+      MAX(consumerPrice) AS unitPrice,
+      COALESCE(MAX(IF(status = 'ALLOWED', 'ALLOWED', NULL)), ANY_VALUE(status)) AS status
     FROM base
     WHERE publisher IS NOT NULL AND isbn IS NOT NULL
     GROUP BY publisher, isbn
@@ -84,13 +90,14 @@ export async function fetchUsage(startDate: string, endDate: string): Promise<Us
   });
 
   return (rows as Record<string, unknown>[]).map((r) => {
-    const price = r["단가"] ?? r.unitPrice;
+    const price = r.unitPrice ?? r["단가"];
     return {
       publisher: (r.publisher as string) ?? null,
       usedIsbn: String(r.usedIsbn ?? ""),
       bookName: (r.bookName as string) ?? null,
       userCount: Number(r.userCount ?? 0),
       unitPrice: price == null ? null : Number(price),
+      status: (r.status as string) ?? null,
     };
   });
 }
