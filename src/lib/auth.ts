@@ -32,9 +32,9 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 export function verifyPassword(input: string): boolean {
-  const expected = process.env.SETTLEMENT_PASSWORD || "";
+  const expected = (process.env.SETTLEMENT_PASSWORD || "").trim();
   if (!expected) return false;
-  return safeEqual(input, expected);
+  return safeEqual((input || "").trim(), expected);
 }
 
 /** 만료시각을 담은 서명 토큰 발급 */
