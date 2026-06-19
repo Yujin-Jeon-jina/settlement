@@ -34,6 +34,20 @@ export async function countContracts(): Promise<number> {
   }
 }
 
+/** 단일 계약 교재 수동 추가/수정 (수동 입력 매칭용) */
+export async function upsertContract(c: {
+  isbn: string;
+  publisher: string;
+  title: string;
+  bookPrice: number;
+}): Promise<void> {
+  await prisma.contract.upsert({
+    where: { isbn: c.isbn },
+    create: { isbn: c.isbn, publisher: c.publisher, title: c.title, bookPrice: c.bookPrice },
+    update: { publisher: c.publisher, title: c.title, bookPrice: c.bookPrice },
+  });
+}
+
 /** RFC4180 유사 CSV 파서 (따옴표·내부 콤마 처리) */
 function parseCsv(text: string): string[][] {
   const rows: string[][] = [];

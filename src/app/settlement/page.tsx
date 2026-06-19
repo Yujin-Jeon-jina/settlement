@@ -99,6 +99,45 @@ export default function SettlementPage() {
     });
   }
 
+  async function lookupIsbn(line: SettlementLineDraft) {
+    const res = await fetch("/api/isbn-lookup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isbn: line.usedIsbn, usedTitle: line.bookName, publisher: line.publisher }),
+    });
+    return res.json();
+  }
+
+  async function manualMatch(
+    line: SettlementLineDraft,
+    m: { isbn: string; title: string; publisher: string; bookPrice: number }
+  ) {
+    await fetch("/api/contracts", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(m),
+    });
+    setContracts((prev) => [...prev.filter((c) => c.isbn !== m.isbn), m]);
+    updateLine(line.usedIsbn, {
+      matchStatus: "confirmed",
+      contractIsbn: m.isbn,
+      contractBookName: m.title,
+      unitPrice: m.bookPrice,
+      amount: m.bookPrice * line.userCount,
+    });
+    await fetch("/api/mappings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        usedIsbn: line.usedIsbn,
+        contractIsbn: m.isbn,
+        publisher: line.publisher,
+        bookName: line.bookName,
+        status: "confirmed",
+      }),
+    });
+  }
+
   async function markUnauthorized(line: SettlementLineDraft) {
     updateLine(line.usedIsbn, { matchStatus: "unauthorized", contractIsbn: null, unitPrice: 0, amount: 0 });
     await fetch("/api/mappings", {
@@ -237,6 +276,8 @@ export default function SettlementPage() {
               verifying,
               verify,
               contracts,
+              lookupIsbn,
+              manualMatch,
             }}
           />
         )}
@@ -458,9 +499,14 @@ function SettlementTab(p: any) {
                               </span>
                             </button>
                           ))}
-                          <ManualMatch line={l} contracts={p.contracts || []} onPick={(isbn: string) => p.confirmMatch(l, isbn)} />
-                          <button onClick={() => p.markUnauthorized(l)}
-                            className="text-[11px] text-[var(--purple)] underline">미허가 처리</button>
+                          <MatchTools
+                            line={l}
+                            contracts={p.contracts || []}
+                            onPick={(isbn: string) => p.confirmMatch(l, isbn)}
+                            onLookup={() => p.lookupIsbn(l)}
+                            onManual={(m: any) => p.manualMatch(l, m)}
+                            onUnauthorized={() => p.markUnauthorized(l)}
+                          />
                         </div>
                       )}
                     </td>
@@ -651,57 +697,122 @@ function HistoryTab() {
   );
 }
 
-/* ───────────────── 직접 검색 매칭 (추천 후보가 없거나 부정확할 때) ───────────────── */
-function ManualMatch({
+/* ───────────────── 확인필요 매칭 도구 (알라딘 조회 / 직접검색 / 직접입력 / 미허가) ───────────────── */
+function MatchTools({
   line,
   contracts,
   onPick,
+  onLookup,
+  onManual,
+  onUnauthorized,
 }: {
   line: SettlementLineDraft;
   contracts: any[];
   onPick: (isbn: string) => void;
+  onLookup: () => Promise<any>;
+  onManual: (m: { isbn: string; title: string; publisher: string; bookPrice: number }) => void;
+  onUnauthorized: () => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"" | "search" | "aladin" | "manual">("");
   const [q, setQ] = useState("");
+  const [aladin, setAladin] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
+  const [m, setM] = useState({ isbn: "", title: "", bookPrice: "" });
   const norm = (s: string) => (s || "").toLowerCase().replace(/\s+/g, "");
+
   const results = useMemo(() => {
-    if (!q.trim()) {
-      // 같은 출판사 교재 우선 노출
+    if (!q.trim())
       return contracts.filter((c) => c.publisher && line.publisher && c.publisher.includes(line.publisher)).slice(0, 12);
-    }
     const nq = norm(q);
-    return contracts
-      .filter((c) => norm(c.title).includes(nq) || (c.isbn || "").includes(q.trim()))
-      .slice(0, 20);
+    return contracts.filter((c) => norm(c.title).includes(nq) || (c.isbn || "").includes(q.trim())).slice(0, 20);
   }, [q, contracts, line.publisher]);
 
-  if (!open) {
-    return (
-      <button onClick={() => setOpen(true)} className="text-[11px] text-[var(--blue)] underline mr-3">
-        계약목록에서 직접 찾기
-      </button>
-    );
+  async function runAladin() {
+    setBusy(true);
+    setAladin(null);
+    try {
+      setAladin(await onLookup());
+    } finally {
+      setBusy(false);
+    }
   }
+
   return (
-    <div className="mt-1 border border-[var(--border-strong)] rounded-md p-2">
-      <input
-        autoFocus
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="계약 교재명 또는 ISBN 검색…"
-        className="w-full border border-[var(--border)] rounded px-2 py-1 text-[12px] outline-none focus:border-[var(--orange)]"
-      />
-      <div className="max-h-40 overflow-auto mt-1 space-y-1">
-        {results.length === 0 && <div className="text-[11px] text-[var(--muted)] px-1">검색 결과 없음</div>}
-        {results.map((c) => (
-          <button key={c.isbn} onClick={() => onPick(c.isbn)}
-            className="block w-full text-left border border-[var(--border)] rounded px-2 py-1 hover:border-[var(--orange)]">
-            <span className="text-[12px]">{c.title}</span>
-            <span className="mono text-[11px] text-[var(--muted)] ml-1">· {c.isbn} · {(c.bookPrice || 0).toLocaleString()}원</span>
-          </button>
-        ))}
+    <div className="mt-1">
+      <div className="flex flex-wrap gap-2 text-[11px]">
+        <button onClick={() => { setMode("aladin"); runAladin(); }} className="text-[var(--blue)] underline">알라딘 조회</button>
+        <button onClick={() => setMode(mode === "search" ? "" : "search")} className="text-[var(--blue)] underline">직접 검색</button>
+        <button onClick={() => setMode(mode === "manual" ? "" : "manual")} className="text-[var(--blue)] underline">직접 입력</button>
+        <button onClick={onUnauthorized} className="text-[var(--purple)] underline">미허가</button>
       </div>
-      <button onClick={() => setOpen(false)} className="text-[11px] text-[var(--muted)] underline mt-1">닫기</button>
+
+      {mode === "aladin" && (
+        <div className="mt-1 border border-[var(--border-strong)] rounded-md p-2 max-w-[420px]">
+          {busy && <div className="text-[11px] text-[var(--muted)]">알라딘 조회 중…</div>}
+          {!busy && aladin && (
+            <>
+              {aladin.lookupError && <div className="text-[11px] text-[var(--red)]">조회 실패: {aladin.lookupError}</div>}
+              {aladin.lookedUpTitle && (
+                <div className="text-[11px] text-[var(--muted)] mb-1">조회 도서명: <b className="text-[var(--text)]">{aladin.lookedUpTitle}</b></div>
+              )}
+              {(aladin.candidates || []).length === 0 && (
+                <div className="text-[11px] text-[var(--muted)]">계약목록에서 일치 후보 없음 — 직접 검색/입력 사용</div>
+              )}
+              {(aladin.candidates || []).map((c: any) => (
+                <button key={c.contractIsbn} onClick={() => onPick(c.contractIsbn)}
+                  className="block w-full text-left border border-[var(--border)] rounded px-2 py-1 mt-1 hover:border-[var(--orange)]">
+                  <span className="text-[12px]">{c.title}</span>
+                  <span className="mono text-[11px] text-[var(--muted)] ml-1">· {c.bookPrice.toLocaleString()}원 · 유사도 {(c.score * 100).toFixed(0)}%</span>
+                </button>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+
+      {mode === "search" && (
+        <div className="mt-1 border border-[var(--border-strong)] rounded-md p-2 max-w-[420px]">
+          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="계약 교재명 또는 ISBN 검색…"
+            className="w-full border border-[var(--border)] rounded px-2 py-1 text-[12px] outline-none focus:border-[var(--orange)]" />
+          <div className="max-h-40 overflow-auto mt-1 space-y-1">
+            {results.length === 0 && <div className="text-[11px] text-[var(--muted)] px-1">검색 결과 없음</div>}
+            {results.map((c) => (
+              <button key={c.isbn} onClick={() => onPick(c.isbn)}
+                className="block w-full text-left border border-[var(--border)] rounded px-2 py-1 hover:border-[var(--orange)]">
+                <span className="text-[12px]">{c.title}</span>
+                <span className="mono text-[11px] text-[var(--muted)] ml-1">· {c.isbn} · {(c.bookPrice || 0).toLocaleString()}원</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {mode === "manual" && (
+        <div className="mt-1 border border-[var(--border-strong)] rounded-md p-2 max-w-[420px] space-y-1">
+          <div className="text-[11px] text-[var(--muted)]">계약목록에 없으면 직접 입력해 등록 (이후 자동 재사용)</div>
+          <input value={m.title} onChange={(e) => setM({ ...m, title: e.target.value })} placeholder="계약 교재명"
+            className="w-full border border-[var(--border)] rounded px-2 py-1 text-[12px]" />
+          <div className="flex gap-1">
+            <input value={m.isbn} onChange={(e) => setM({ ...m, isbn: e.target.value })} placeholder="계약 ISBN (모르면 비워두기)"
+              className="flex-1 border border-[var(--border)] rounded px-2 py-1 text-[12px] mono" />
+            <input value={m.bookPrice} onChange={(e) => setM({ ...m, bookPrice: e.target.value.replace(/[^0-9]/g, "") })} placeholder="단가"
+              className="w-24 border border-[var(--border)] rounded px-2 py-1 text-[12px] mono text-right" />
+          </div>
+          <button
+            disabled={!m.title.trim() || !m.bookPrice}
+            onClick={() =>
+              onManual({
+                isbn: m.isbn.trim() || `M-${line.usedIsbn}`,
+                title: m.title.trim(),
+                publisher: line.publisher,
+                bookPrice: Number(m.bookPrice || 0),
+              })
+            }
+            className="rounded px-3 py-1 text-[12px] bg-[var(--ink)] text-white disabled:opacity-50">
+            등록 후 매칭
+          </button>
+        </div>
+      )}
     </div>
   );
 }
