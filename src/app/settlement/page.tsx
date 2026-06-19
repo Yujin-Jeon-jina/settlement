@@ -234,6 +234,13 @@ export default function SettlementPage() {
 
 /* ───────────────── 정산 탭 ───────────────── */
 function SettlementTab(p: any) {
+  const [view, setView] = useState<"all" | "settle" | "unauth">("all");
+  const all = p.visibleLines as SettlementLineDraft[];
+  const isSettled = (l: SettlementLineDraft) => l.matchStatus === "auto" || l.matchStatus === "confirmed";
+  const isUnauth = (l: SettlementLineDraft) => l.matchStatus === "unauthorized" || l.matchStatus === "unmatched";
+  const rows = all.filter((l) => (view === "all" ? true : view === "settle" ? isSettled(l) : isUnauth(l)));
+  const settleCount = all.filter(isSettled).length;
+  const unauthCount = all.filter(isUnauth).length;
   return (
     <>
       {/* 요약 한 줄 */}
@@ -343,6 +350,32 @@ function SettlementTab(p: any) {
         </div>
       )}
 
+      {/* 보기 필터: 정산 대상 / 미허가 분리 */}
+      {p.lines.length > 0 && (
+        <div className="flex items-center gap-1 mt-3 flex-wrap">
+          {[
+            { id: "all", label: `전체 ${all.length}` },
+            { id: "settle", label: `정산 대상 ${settleCount}` },
+            { id: "unauth", label: `미허가 ${unauthCount}` },
+          ].map((v) => (
+            <button key={v.id} onClick={() => setView(v.id as any)}
+              className={[
+                "px-3 py-1 text-[12px] rounded-md border",
+                view === v.id
+                  ? "border-[var(--orange)] text-[var(--orange)] font-medium bg-[#fff7f0]"
+                  : "border-[var(--border-strong)] text-[var(--muted)]",
+              ].join(" ")}>
+              {v.label}
+            </button>
+          ))}
+          {view === "unauth" && (
+            <span className="ml-2 text-[11px] text-[var(--muted)]">
+              ※ 미허가(비계약·DENIED·EXPIRED)는 정산 금액에서 제외되며, 사용 현황 확인용 목록입니다.
+            </span>
+          )}
+        </div>
+      )}
+
       {/* 테이블 */}
       {p.lines.length > 0 && (
         <div className="mt-4">
@@ -358,7 +391,7 @@ function SettlementTab(p: any) {
               </tr>
             </thead>
             <tbody>
-              {p.visibleLines.map((l: SettlementLineDraft) => {
+              {rows.map((l: SettlementLineDraft) => {
                 const meta = STATUS_META[l.matchStatus];
                 const matched = l.matchStatus === "auto" || l.matchStatus === "confirmed";
                 return (
@@ -425,7 +458,7 @@ function SettlementTab(p: any) {
               })}
             </tbody>
           </table>
-          <div className="text-[12px] text-[var(--muted)] mt-4">총 {p.visibleLines.length}건</div>
+          <div className="text-[12px] text-[var(--muted)] mt-4">총 {rows.length}건</div>
         </div>
       )}
     </>
