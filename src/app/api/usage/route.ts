@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchUsage, fetchContractedBooks } from "@/lib/bigquery";
+import { fetchUsage } from "@/lib/bigquery";
+import { fetchContracts } from "@/lib/google";
 import { buildSettlementDraft, summarize } from "@/lib/settlement";
 import { prisma } from "@/lib/db";
 
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
   try {
     const [usage, contracts, stored] = await Promise.all([
       fetchUsage(startDate, endDate),
-      fetchContractedBooks(),
+      fetchContracts(),
       getStoredMappings(),
     ]);
     const lines = buildSettlementDraft(usage, contracts, stored);

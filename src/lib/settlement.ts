@@ -35,16 +35,23 @@ export function buildSettlementDraft(
   return usage.map((u) => {
     const bookName = u.bookName || u.usedIsbn;
     const publisher = u.publisher || "(미상)";
-    const base = { usedIsbn: u.usedIsbn, publisher, bookName, userCount: u.userCount, contractStatus: u.status ?? null };
+    const approved = active.has((u.status || "").toUpperCase()); // book_contracts 승인여부
+    const base = {
+      usedIsbn: u.usedIsbn,
+      publisher,
+      bookName,
+      userCount: u.userCount,
+      contractStatus: u.status ?? null,
+    };
 
-    // 1) 저장된 확정/미허가 매핑
+    // 1) 저장된 확정/미허가 매핑 (사람이 한번 정한 건 그대로)
     const saved = storedByUsed.get(u.usedIsbn);
     if (saved) {
       if (saved.status === "unauthorized") {
-        return { ...base, matchStatus: "unauthorized", contractIsbn: null, unitPrice: 0, amount: 0, candidates: [] };
+        return { ...base, matchStatus: "unauthorized", contractIsbn: null, contractBookName: null, unitPrice: 0, amount: 0, candidates: [] };
       }
       const c = saved.contractIsbn ? contractByIsbn.get(saved.contractIsbn) : undefined;
-      const price = u.unitPrice ?? c?.bookPrice ?? 0;
+      const price = c?.bookPrice ?? 0; // 단가 = IP LIST bookPrice
       return {
         ...base,
         matchStatus: "confirmed",
@@ -56,26 +63,10 @@ export function buildSettlementDraft(
       };
     }
 
-    // 2) book_contracts status가 승인(ALLOWED) → 자동 정산, 단가 = consumer_price
-    const statusUpper = (u.status || "").toUpperCase();
-    if (active.has(statusUpper)) {
-      const c = contractByIsbn.get(u.usedIsbn);
-      const price = u.unitPrice ?? c?.bookPrice ?? 0;
-      return {
-        ...base,
-        matchStatus: "auto",
-        contractIsbn: u.usedIsbn,
-        contractBookName: c?.title ?? null,
-        unitPrice: price,
-        amount: price * u.userCount,
-        candidates: [],
-      };
-    }
-
-    // 3) (status 없을 때) 계약목록 ISBN 정확 일치 폴백
+    // 2) 정산 대상 = IP LIST에 ISBN 정확 매칭 AND book_contracts 승인(ALLOWED)
     const exact = contractByIsbn.get(u.usedIsbn);
-    if (exact && !statusUpper) {
-      const price = u.unitPrice ?? exact.bookPrice;
+    if (exact && approved) {
+      const price = exact.bookPrice; // 단가 = IP LIST bookPrice
       return {
         ...base,
         matchStatus: "auto",
@@ -87,12 +78,14 @@ export function buildSettlementDraft(
       };
     }
 
-    // 4) DENIED/EXPIRED/계약행 없음 → 제목 유사 후보 추천, 사람이 확정/미허가 판단
+    // 3) 그 외(개정판=IP LIST에 ISBN 없음 / 미승인) → 확인필요: IP LIST에서 제목 유사 후보 추천
+    //    사람이 후보 확정 시 정산, 또는 미허가 처리. (미허가/미정산은 별도 목록으로 확인)
     const candidates = suggestCandidates(bookName, u.publisher, contracts);
     return {
       ...base,
       matchStatus: "unmatched",
       contractIsbn: null,
+      contractBookName: null,
       unitPrice: 0,
       amount: 0,
       candidates,

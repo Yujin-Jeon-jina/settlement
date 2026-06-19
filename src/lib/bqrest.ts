@@ -180,3 +180,27 @@ export async function runQuery(
 
   return rows;
 }
+
+/** Google Sheets 값 읽기 (node https). 토큰에 spreadsheets 스코프 필요. */
+export async function sheetGet(spreadsheetId: string, range: string): Promise<string[][]> {
+  const token = await getAccessToken();
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(
+    range
+  )}?majorDimension=ROWS`;
+  const { status, json, raw } = await httpsJson(url, "GET", { Authorization: `Bearer ${token}` });
+  if (status !== 200) {
+    const msg = json?.error?.message || raw.slice(0, 200);
+    throw new Error(`Sheets 읽기 실패 status=${status} ${msg}`);
+  }
+  return (json?.values as string[][]) || [];
+}
+
+/** gid(sheetId)로 탭 제목 조회 */
+export async function sheetTitleByGid(spreadsheetId: string, gid: number): Promise<string | null> {
+  const token = await getAccessToken();
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties(sheetId,title)`;
+  const { status, json } = await httpsJson(url, "GET", { Authorization: `Bearer ${token}` });
+  if (status !== 200) return null;
+  const s = (json?.sheets || []).find((x: any) => x?.properties?.sheetId === gid);
+  return s?.properties?.title || null;
+}
