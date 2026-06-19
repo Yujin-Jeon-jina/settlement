@@ -1,29 +1,17 @@
 import { google } from "googleapis";
 import type { ContractBook } from "./types";
 import { MOCK_CONTRACTS } from "./mock";
+import { getGoogleAuth, useMock } from "./gcp";
 
+// Sheets/Drive 기능(계약시트 읽기·피벗 대조·write-back)에만 필요한 스코프.
+// 본인 OAuth 사용 시, 이 기능을 쓰려면 로그인에 spreadsheets/drive 스코프 포함 필요.
 const SCOPES = [
   "https://www.googleapis.com/auth/spreadsheets",
   "https://www.googleapis.com/auth/drive",
 ];
 
-function useMock(): boolean {
-  return process.env.USE_MOCK_DATA === "true" || !process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-}
-
-function serviceAccount() {
-  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  if (!raw) throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON 미설정");
-  return JSON.parse(raw) as { client_email: string; private_key: string };
-}
-
 export function googleAuth() {
-  const sa = serviceAccount();
-  return new google.auth.JWT({
-    email: sa.client_email,
-    key: sa.private_key.replace(/\\n/g, "\n"),
-    scopes: SCOPES,
-  });
+  return getGoogleAuth(SCOPES);
 }
 
 function toNumber(v: unknown): number {

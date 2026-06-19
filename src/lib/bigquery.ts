@@ -1,27 +1,10 @@
-import { BigQuery } from "@google-cloud/bigquery";
-import type { UsageRow } from "./types";
-import { MOCK_USAGE } from "./mock";
+import type { ContractBook, UsageRow } from "./types";
+import { MOCK_CONTRACTS, MOCK_USAGE } from "./mock";
+import { getBigQuery, useMock as gcpUseMock } from "./gcp";
 
+// 자격증명(서비스계정 또는 본인 OAuth)이 없거나, 프로젝트 ID가 없으면 목업.
 function useMock(): boolean {
-  return (
-    process.env.USE_MOCK_DATA === "true" ||
-    !process.env.GOOGLE_SERVICE_ACCOUNT_JSON ||
-    !process.env.BIGQUERY_PROJECT_ID
-  );
-}
-
-function client(): BigQuery {
-  const sa = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON!) as {
-    client_email: string;
-    private_key: string;
-  };
-  return new BigQuery({
-    projectId: process.env.BIGQUERY_PROJECT_ID,
-    credentials: {
-      client_email: sa.client_email,
-      private_key: sa.private_key.replace(/\\n/g, "\n"),
-    },
-  });
+  return gcpUseMock() || !process.env.BIGQUERY_PROJECT_ID;
 }
 
 /**
@@ -82,7 +65,7 @@ export async function fetchUsage(startDate: string, endDate: string): Promise<Us
     ORDER BY publisher, userCount DESC
   `;
 
-  const bq = client();
+  const bq = getBigQuery();
   const [rows] = await bq.query({
     query,
     params: { START_YYYYMMDD: startDate, END_YYYYMMDD: endDate },
@@ -100,4 +83,51 @@ export async function fetchUsage(startDate: string, endDate: string): Promise<Us
       status: (r.status as string) ?? null,
     };
   });
+}
+
+/**
+ * 계약 교재(승인=ALLOWED) 목록을 BigQuery에서 조회 → 매칭 후보 소스.
+ * books(제목/출판사) ⋈ book_contracts(consumer_price). Sheets 의존 제거용.
+ */
+export async function fetchContractedBooks(): Promise<ContractBook[]> {
+  if (useMock()) return MOCK_CONTRACTS;
+
+  const active = (process.env.CONTRACT_ACTIVE_STATUSES || "ALLOWED")
+    .split(",")
+    .map((s) => `'${s.trim().toUpperCase()}'`)
+    .join(",");
+
+  const query = `
+    SELECT
+      CAST(b.isbn AS STRING) AS isbn,
+      ANY_VALUE(b.name) AS title,
+      ANY_VALUE(
+        CASE
+          WHEN b.publisher LIKE '%NE능률%' THEN 'NE능률'
+          WHEN b.publisher LIKE '%개념원리%' THEN '개념원리'
+          WHEN b.publisher LIKE '%쎄듀%' THEN '쎄듀'
+          WHEN b.publisher LIKE '%지학사%' THEN '지학사'
+          WHEN b.publisher LIKE '%키출판사%' THEN '키출판사'
+          WHEN b.publisher LIKE '%마더텅%' THEN '마더텅'
+          WHEN b.publisher LIKE '%수경출판%' THEN '수경출판사'
+          ELSE b.publisher
+        END) AS publisher,
+      MAX(c.consumer_price) AS bookPrice
+    FROM \`mathpresso-data.qanda_rds_live.books\` b
+    JOIN \`mathpresso-data.qanda_rds_live.book_contracts\` c
+      ON CAST(b.isbn AS STRING) = CAST(c.isbn AS STRING)
+    WHERE UPPER(c.status) IN (${active})
+    GROUP BY b.isbn
+  `;
+
+  const bq = getBigQuery();
+  const [rows] = await bq.query({ query });
+  return (rows as Record<string, unknown>[]).map((r) => ({
+    isbn: String(r.isbn ?? ""),
+    title: (r.title as string) ?? "",
+    publisher: (r.publisher as string) ?? "",
+    bookPrice: Number(r.bookPrice ?? 0),
+    startDate: null,
+    endDate: null,
+  }));
 }
