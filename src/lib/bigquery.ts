@@ -38,6 +38,8 @@ const DEFAULT_BASE_SQL = `
   ) l
   LEFT JOIN \`mathpresso-data.qanda_rds_live.books\` b ON l.isbn = b.isbn
   LEFT JOIN \`mathpresso-data.qanda_rds_live.book_contracts\` c ON l.isbn = c.isbn
+  -- 정산 기준(확정): 그 달에 '신규 등록'한 사용자만 카운트 = 피벗/bookips와 동일.
+  -- COALESCE(registered_at, deleted_at)가 정산월 안에 드는 행만 포함(이전 달 등록·계속 사용분 제외).
   WHERE COALESCE(l.registeredAt, l.deletedAt) >= @START_YYYYMMDD
     AND COALESCE(l.registeredAt, l.deletedAt) < DATE_ADD(@END_YYYYMMDD, INTERVAL 1 DAY)
 `;
