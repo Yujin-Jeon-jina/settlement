@@ -38,6 +38,16 @@ export default function SettlementPage() {
   const [savedMsg, setSavedMsg] = useState("");
   const [verify, setVerify] = useState<any>(null);
   const [verifying, setVerifying] = useState(false);
+  const [contracts, setContracts] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch("/api/contracts").then((r) => r.json()).then((j) => setContracts(j.contracts || [])).catch(() => {});
+  }, []);
+  const contractById = useMemo(() => {
+    const m = new Map<string, any>();
+    contracts.forEach((c) => m.set(c.isbn, c));
+    return m;
+  }, [contracts]);
 
   async function load() {
     setLoading(true);
@@ -66,10 +76,13 @@ export default function SettlementPage() {
 
   async function confirmMatch(line: SettlementLineDraft, contractIsbn: string) {
     const cand = line.candidates.find((c) => c.contractIsbn === contractIsbn);
-    const unitPrice = cand?.bookPrice ?? 0;
+    const c = contractById.get(contractIsbn);
+    const unitPrice = cand?.bookPrice ?? c?.bookPrice ?? 0;
+    const title = cand?.title ?? c?.title ?? null;
     updateLine(line.usedIsbn, {
       matchStatus: "confirmed",
       contractIsbn,
+      contractBookName: title,
       unitPrice,
       amount: unitPrice * line.userCount,
     });
@@ -223,6 +236,7 @@ export default function SettlementPage() {
               runVerify,
               verifying,
               verify,
+              contracts,
             }}
           />
         )}
@@ -444,6 +458,7 @@ function SettlementTab(p: any) {
                               </span>
                             </button>
                           ))}
+                          <ManualMatch line={l} contracts={p.contracts || []} onPick={(isbn: string) => p.confirmMatch(l, isbn)} />
                           <button onClick={() => p.markUnauthorized(l)}
                             className="text-[11px] text-[var(--purple)] underline">미허가 처리</button>
                         </div>
@@ -632,6 +647,61 @@ function HistoryTab() {
       {loaded && runs.length === 0 && (
         <div className="text-center text-[var(--muted)] py-16 text-[13px]">저장된 정산 이력이 없습니다.</div>
       )}
+    </div>
+  );
+}
+
+/* ───────────────── 직접 검색 매칭 (추천 후보가 없거나 부정확할 때) ───────────────── */
+function ManualMatch({
+  line,
+  contracts,
+  onPick,
+}: {
+  line: SettlementLineDraft;
+  contracts: any[];
+  onPick: (isbn: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const norm = (s: string) => (s || "").toLowerCase().replace(/\s+/g, "");
+  const results = useMemo(() => {
+    if (!q.trim()) {
+      // 같은 출판사 교재 우선 노출
+      return contracts.filter((c) => c.publisher && line.publisher && c.publisher.includes(line.publisher)).slice(0, 12);
+    }
+    const nq = norm(q);
+    return contracts
+      .filter((c) => norm(c.title).includes(nq) || (c.isbn || "").includes(q.trim()))
+      .slice(0, 20);
+  }, [q, contracts, line.publisher]);
+
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)} className="text-[11px] text-[var(--blue)] underline mr-3">
+        계약목록에서 직접 찾기
+      </button>
+    );
+  }
+  return (
+    <div className="mt-1 border border-[var(--border-strong)] rounded-md p-2">
+      <input
+        autoFocus
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="계약 교재명 또는 ISBN 검색…"
+        className="w-full border border-[var(--border)] rounded px-2 py-1 text-[12px] outline-none focus:border-[var(--orange)]"
+      />
+      <div className="max-h-40 overflow-auto mt-1 space-y-1">
+        {results.length === 0 && <div className="text-[11px] text-[var(--muted)] px-1">검색 결과 없음</div>}
+        {results.map((c) => (
+          <button key={c.isbn} onClick={() => onPick(c.isbn)}
+            className="block w-full text-left border border-[var(--border)] rounded px-2 py-1 hover:border-[var(--orange)]">
+            <span className="text-[12px]">{c.title}</span>
+            <span className="mono text-[11px] text-[var(--muted)] ml-1">· {c.isbn} · {(c.bookPrice || 0).toLocaleString()}원</span>
+          </button>
+        ))}
+      </div>
+      <button onClick={() => setOpen(false)} className="text-[11px] text-[var(--muted)] underline mt-1">닫기</button>
     </div>
   );
 }
