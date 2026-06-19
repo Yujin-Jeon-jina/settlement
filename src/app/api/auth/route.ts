@@ -17,6 +17,20 @@ export async function POST(req: NextRequest) {
   return res;
 }
 
+// 진단용(임시): 비밀번호 값은 노출하지 않고 환경변수 설정 상태만 확인.
+export async function GET() {
+  const pw = process.env.SETTLEMENT_PASSWORD || "";
+  return NextResponse.json({
+    settlementPasswordConfigured: !!pw.trim(),
+    settlementPasswordLength: pw.trim().length,
+    sessionSecretConfigured: !!(process.env.SESSION_SECRET || "").trim(),
+    databaseUrlConfigured: !!(process.env.DATABASE_URL || "").trim(),
+    googleOauthConfigured: !!(process.env.GOOGLE_OAUTH_CREDENTIALS || "").trim(),
+    useMockData: process.env.USE_MOCK_DATA ?? null,
+    bigqueryProjectId: process.env.BIGQUERY_PROJECT_ID ?? null,
+  });
+}
+
 export async function DELETE() {
   const res = NextResponse.json({ ok: true });
   res.cookies.set(SESSION_COOKIE, "", { path: "/", maxAge: 0 });
