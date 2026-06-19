@@ -36,6 +36,8 @@ export default function SettlementPage() {
   const [error, setError] = useState("");
   const [activePublisher, setActivePublisher] = useState("전체");
   const [savedMsg, setSavedMsg] = useState("");
+  const [verify, setVerify] = useState<any>(null);
+  const [verifying, setVerifying] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -96,6 +98,23 @@ export default function SettlementPage() {
         status: "unauthorized",
       }),
     });
+  }
+
+  async function runVerify() {
+    setVerifying(true);
+    setVerify(null);
+    const res = await fetch("/api/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ startDate, endDate }),
+    });
+    setVerifying(false);
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setVerify({ error: j.error || "대조 실패" });
+      return;
+    }
+    setVerify(j);
   }
 
   async function save() {
@@ -200,6 +219,9 @@ export default function SettlementPage() {
               save,
               confirmMatch,
               markUnauthorized,
+              runVerify,
+              verifying,
+              verify,
             }}
           />
         )}
@@ -242,6 +264,10 @@ function SettlementTab(p: any) {
         </button>
         {p.lines.length > 0 && (
           <div className="ml-auto flex items-center gap-2">
+            <button onClick={p.runVerify} disabled={p.verifying}
+              className="rounded-md px-3 py-1.5 text-[13px] border border-[var(--border-strong)] text-[var(--text)] disabled:opacity-60">
+              {p.verifying ? "대조 중…" : "피벗 대조"}
+            </button>
             <button onClick={p.save}
               className="rounded-md px-3 py-1.5 text-[13px] border border-[var(--border-strong)] text-[var(--text)]">
               이력 저장
@@ -250,6 +276,49 @@ function SettlementTab(p: any) {
           </div>
         )}
       </div>
+
+      {/* 피벗 대조 결과 */}
+      {p.verify && !p.verify.error && (
+        <div className="mt-3 rounded-md border border-[var(--border-strong)] p-3">
+          <div className="text-[13px]">
+            피벗 대조:{" "}
+            <b style={{ color: p.verify.summary.mismatched === 0 ? "var(--teal)" : "var(--orange)" }}>
+              {p.verify.summary.matched}/{p.verify.summary.total} 일치
+            </b>
+            {p.verify.summary.mismatched > 0 && (
+              <span className="text-[var(--orange)]"> · 불일치 {p.verify.summary.mismatched}건</span>
+            )}
+            <span className="text-[var(--muted)]">
+              {" "}· BQ 사용자합 {p.verify.summary.bqTotalUsers} / 피벗 {p.verify.summary.pivotTotalUsers}
+            </span>
+          </div>
+          {p.verify.summary.mismatched > 0 && (
+            <table className="w-full text-[12px] mt-2">
+              <thead>
+                <tr className="text-left text-[var(--muted)] border-b border-[var(--border)]">
+                  <th className="py-1 pr-3 font-medium">출판사</th>
+                  <th className="py-1 pr-3 font-medium">교재 / ISBN</th>
+                  <th className="py-1 pr-3 font-medium text-right">BQ</th>
+                  <th className="py-1 pr-3 font-medium text-right">피벗</th>
+                </tr>
+              </thead>
+              <tbody>
+                {p.verify.rows.filter((r: any) => !r.match).map((r: any) => (
+                  <tr key={r.usedIsbn} className="border-b border-[var(--border)]">
+                    <td className="py-1.5 pr-3">{r.publisher}</td>
+                    <td className="py-1.5 pr-3">
+                      {r.bookName} <span className="mono text-[11px] text-[var(--muted)]">{r.usedIsbn}</span>
+                    </td>
+                    <td className="py-1.5 pr-3 text-right mono">{r.bqCount ?? "—"}</td>
+                    <td className="py-1.5 pr-3 text-right mono">{r.pivotCount ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+      {p.verify?.error && <Banner color="var(--red)">{p.verify.error}</Banner>}
 
       {p.error && <Banner color="var(--red)">{p.error}</Banner>}
       {p.savedMsg && <Banner color="var(--blue)">{p.savedMsg}</Banner>}
