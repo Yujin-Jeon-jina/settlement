@@ -6,11 +6,25 @@ import { google } from "googleapis";
 import { BigQuery } from "@google-cloud/bigquery";
 
 // 일부 컨테이너 환경(Railway 등)에서 IPv6 경로가 불안정해 googleapis 토큰 요청이
-// "Premature close"로 끊기는 문제 방지 → IPv4 우선.
+// "Premature close"로 끊기는 문제 방지 → IPv4 우선 + 연결 계층 IPv4 강제.
 try {
   dns.setDefaultResultOrder?.("ipv4first");
 } catch {
   /* noop */
+}
+try {
+  // Node 전역 fetch(undici)가 IPv4로만 연결하도록 강제 (Premature close 방지)
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { setGlobalDispatcher, Agent } = require("undici");
+  setGlobalDispatcher(
+    new Agent({
+      connect: { family: 4, timeout: 30_000 },
+      keepAliveTimeout: 10_000,
+      keepAliveMaxTimeout: 30_000,
+    })
+  );
+} catch {
+  /* undici 미가용 시 무시 */
 }
 
 /**
