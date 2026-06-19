@@ -61,9 +61,10 @@ const DEFAULT_BASE_SQL = `
   LEFT JOIN \`mathpresso-data.qanda_rds_live.books\` b ON l.isbn = b.isbn
   LEFT JOIN \`mathpresso-data.qanda_rds_live.book_contracts\` c ON l.isbn = c.isbn
   -- 정산 기준(확정): 그 달에 '신규 등록'한 사용자만 카운트 = 피벗/bookips와 동일.
-  -- COALESCE(registered_at, deleted_at)가 정산월 안에 드는 행만 포함(이전 달 등록·계속 사용분 제외).
-  WHERE COALESCE(l.registeredAt, l.deletedAt) >= @START_YYYYMMDD
-    AND COALESCE(l.registeredAt, l.deletedAt) < DATE_ADD(@END_YYYYMMDD, INTERVAL 1 DAY)
+  -- 삭제된 사용분(deleted_at 존재)은 제외 → registered_at가 정산월 안인 활성 등록만.
+  WHERE l.deletedAt IS NULL
+    AND l.registeredAt >= @START_YYYYMMDD
+    AND l.registeredAt < DATE_ADD(@END_YYYYMMDD, INTERVAL 1 DAY)
 `;
 
 /** 정산월 사용량(사용 ISBN별 고유 사용자수)을 BigQuery에서 집계 */
