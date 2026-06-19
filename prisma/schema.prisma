@@ -1,0 +1,62 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// 사용 ISBN ↔ 계약 교재(계약 ISBN) 확정 매핑.
+/// 한 번 확정하면 다음 달부터 자동 재사용되어 수동 매칭이 누적적으로 줄어든다.
+model IsbnMapping {
+  usedIsbn     String      @id
+  contractIsbn String?
+  publisher    String
+  bookName     String
+  status       MatchStatus @default(confirmed)
+  confirmedBy  String?
+  confirmedAt  DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([publisher])
+  @@index([contractIsbn])
+}
+
+/// 정산 1회 실행(정산월) 기록.
+model SettlementRun {
+  id          String           @id @default(cuid())
+  periodStart DateTime
+  periodEnd   DateTime
+  status      String           @default("draft")
+  createdBy   String?
+  createdAt   DateTime         @default(now())
+  lines       SettlementLine[]
+
+  @@index([periodStart, periodEnd])
+}
+
+/// 정산 1회의 라인별 결과(출판사·교재 단위).
+model SettlementLine {
+  id           String        @id @default(cuid())
+  runId        String
+  run          SettlementRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  publisher    String
+  usedIsbn     String
+  contractIsbn String?
+  bookName     String
+  userCount    Int
+  unitPrice    Int
+  amount       Int
+  matchStatus  MatchStatus
+
+  @@index([runId])
+  @@index([publisher])
+}
+
+enum MatchStatus {
+  auto // ISBN 정확 일치로 자동 매칭
+  confirmed // 사람이 확인/확정한 매핑
+  unauthorized // 계약에 없는(미허가) 사용분
+  unmatched // 아직 매칭되지 않음
+}
