@@ -225,9 +225,10 @@ export default function SettlementPage() {
   const summary: PublisherSummary[] = useMemo(() => {
     const m = new Map<string, PublisherSummary>();
     for (const l of lines) {
-      const s = m.get(l.publisher) ?? { publisher: l.publisher, totalAmount: 0, lineCount: 0, unauthorizedAmount: 0 };
+      const s = m.get(l.publisher) ?? { publisher: l.publisher, totalAmount: 0, lineCount: 0, unauthorizedAmount: 0, totalUsers: 0 };
       s.lineCount += 1;
       s.totalAmount += l.amount;
+      if (l.matchStatus === "auto" || l.matchStatus === "confirmed") s.totalUsers += l.userCount;
       if (l.matchStatus === "unauthorized" || l.matchStatus === "unmatched") s.unauthorizedAmount += 1;
       m.set(l.publisher, s);
     }
@@ -446,7 +447,9 @@ function SettlementTab(p: any) {
                     className="text-[11px] text-[var(--blue)] underline">⬇ 시트 CSV</button>
                 </div>
                 <div className="text-[18px] font-bold text-[var(--ink)] mt-1">{won(s.totalAmount)}</div>
-                <div className="text-[11px] text-[var(--muted)]">당월 사용액 (정산 {s.lineCount - s.unauthorizedAmount}건)</div>
+                <div className="text-[11px] text-[var(--muted)]">
+                  당월 사용액 · 교재 {s.lineCount - s.unauthorizedAmount}종 · 총 등록 {s.totalUsers}건
+                </div>
 
                 <div className="mt-2 pt-2 border-t border-[var(--border)] text-[12px] space-y-1">
                   <label className="flex items-center justify-between gap-2">

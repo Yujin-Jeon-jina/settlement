@@ -53,4 +53,5 @@ export interface PublisherSummary {
   totalAmount: number;
   lineCount: number;
   unauthorizedAmount: number;
+  totalUsers: number; // 정산 대상 교재들의 등록 교재 수 합계 (= 시트 합계의 수량)
 }
