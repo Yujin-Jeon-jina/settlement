@@ -98,9 +98,10 @@ export function summarize(lines: SettlementLineDraft[]): PublisherSummary[] {
   for (const l of lines) {
     const s =
       map.get(l.publisher) ??
-      { publisher: l.publisher, totalAmount: 0, lineCount: 0, unauthorizedAmount: 0 };
+      { publisher: l.publisher, totalAmount: 0, lineCount: 0, unauthorizedAmount: 0, totalUsers: 0 };
     s.lineCount += 1;
     s.totalAmount += l.amount;
+    if (l.matchStatus === "auto" || l.matchStatus === "confirmed") s.totalUsers += l.userCount;
     if (l.matchStatus === "unauthorized") s.unauthorizedAmount += l.unitPrice * l.userCount;
     map.set(l.publisher, s);
   }
