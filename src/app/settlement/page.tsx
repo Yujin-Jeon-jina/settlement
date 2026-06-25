@@ -470,7 +470,7 @@ function SettlementTab(p: any) {
                           if (e.key === "Enter") doSaveBalance(s.publisher, Number((e.target as HTMLInputElement).value.replace(/[^0-9-]/g, "")) || 0);
                         }}
                         placeholder="입력"
-                        className="w-24 border border-[var(--border)] rounded px-2 py-0.5 text-right mono"
+                        className="w-32 border border-[var(--border)] rounded px-2 py-0.5 text-right mono"
                       />
                       <button
                         onClick={() => doSaveBalance(s.publisher, Number(p.balances?.[s.publisher] ?? 0))}
