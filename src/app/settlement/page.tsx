@@ -41,9 +41,21 @@ export default function SettlementPage() {
   const [verifying, setVerifying] = useState(false);
   const [contracts, setContracts] = useState<any[]>([]);
 
+  const [balances, setBalances] = useState<Record<string, number>>({});
+
   useEffect(() => {
     fetch("/api/contracts").then((r) => r.json()).then((j) => setContracts(j.contracts || [])).catch(() => {});
+    fetch("/api/balances").then((r) => r.json()).then((j) => setBalances(j.balances || {})).catch(() => {});
   }, []);
+
+  function setBalance(publisher: string, prevBalance: number) {
+    setBalances((prev) => ({ ...prev, [publisher]: prevBalance }));
+    fetch("/api/balances", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ publisher, prevBalance }),
+    }).catch(() => {});
+  }
   const contractById = useMemo(() => {
     const m = new Map<string, any>();
     contracts.forEach((c) => m.set(c.isbn, c));
@@ -291,6 +303,8 @@ export default function SettlementPage() {
               contracts,
               lookupIsbn,
               manualMatch,
+              balances,
+              setBalance,
             }}
           />
         )}
@@ -335,7 +349,14 @@ function SettlementTab(p: any) {
     const totalCount = lines.reduce((a, l) => a + l.userCount, 0);
     const totalAmount = lines.reduce((a, l) => a + l.amount, 0);
     const sumRow = ["", "", "", "합계", totalCount, "", totalAmount];
-    const csv = "﻿" + [header, ...body, sumRow].map((r) => r.map(cell).join(",")).join("\n");
+    const prev = Number(p.balances?.[publisher] ?? 0);
+    const ledger = [
+      [],
+      ["", "", "", "전월 MG 잔액", "", "", prev],
+      ["", "", "", "당월 사용액", "", "", -totalAmount],
+      ["", "", "", "사용분 제외 잔여금액", "", "", prev - totalAmount],
+    ];
+    const csv = "﻿" + [header, ...body, sumRow, ...ledger].map((r) => r.map(cell).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -407,20 +428,44 @@ function SettlementTab(p: any) {
         </div>
       )}
 
-      {/* 출판사별 정산금액 + 시트 CSV */}
+      {/* 출판사별 정산금액 + MG잔액 + 시트 CSV */}
       {p.summary.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-4">
-          {p.summary.map((s: PublisherSummary) => (
-            <div key={s.publisher} className="border border-[var(--border-strong)] rounded-md p-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[13px] font-medium">{s.publisher}</span>
-                <button onClick={() => exportPublisherSheet(s.publisher)}
-                  className="text-[11px] text-[var(--blue)] underline">⬇ 시트 CSV</button>
+          {p.summary.map((s: PublisherSummary) => {
+            const prev = Number(p.balances?.[s.publisher] ?? 0);
+            const remain = prev - s.totalAmount;
+            return (
+              <div key={s.publisher} className="border border-[var(--border-strong)] rounded-md p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] font-medium">{s.publisher}</span>
+                  <button onClick={() => exportPublisherSheet(s.publisher)}
+                    className="text-[11px] text-[var(--blue)] underline">⬇ 시트 CSV</button>
+                </div>
+                <div className="text-[18px] font-bold text-[var(--ink)] mt-1">{won(s.totalAmount)}</div>
+                <div className="text-[11px] text-[var(--muted)]">당월 사용액 (정산 {s.lineCount - s.unauthorizedAmount}건)</div>
+
+                <div className="mt-2 pt-2 border-t border-[var(--border)] text-[12px] space-y-1">
+                  <label className="flex items-center justify-between gap-2">
+                    <span className="text-[var(--muted)]">전월 MG 잔액</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      defaultValue={prev ? prev.toLocaleString() : ""}
+                      onBlur={(e) => p.setBalance(s.publisher, Number(e.target.value.replace(/[^0-9-]/g, "")) || 0)}
+                      placeholder="입력"
+                      className="w-28 border border-[var(--border)] rounded px-2 py-0.5 text-right mono"
+                    />
+                  </label>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--muted)]">잔여금액</span>
+                    <span className="mono font-medium" style={{ color: remain < 0 ? "var(--red)" : "var(--ink)" }}>
+                      {remain.toLocaleString()}원
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div className="text-[18px] font-bold text-[var(--ink)] mt-1">{won(s.totalAmount)}</div>
-              <div className="text-[11px] text-[var(--muted)]">정산 {s.lineCount - s.unauthorizedAmount}건 · 확인필요/미허가 {s.unauthorizedAmount}건</div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

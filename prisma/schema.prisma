@@ -73,3 +73,10 @@ model Contract {
 
   @@index([publisher])
 }
+
+/// 출판사별 MG '전월 잔액' (당월 사용액·잔여 자동 계산용). 매달 이월 저장.
+model PublisherBalance {
+  publisher   String   @id
+  prevBalance Int      @default(0)
+  updatedAt   DateTime @updatedAt
+}
