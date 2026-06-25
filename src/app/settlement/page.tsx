@@ -255,6 +255,8 @@ export default function SettlementPage() {
   const visibleLines =
     activePublisher === "전체" ? lines : lines.filter((l) => l.publisher === activePublisher);
   const grandTotal = summary.reduce((a, s) => a + s.totalAmount, 0);
+  const settledTypes = summary.reduce((a, s) => a + (s.lineCount - s.unauthorizedAmount), 0);
+  const totalRegistrations = summary.reduce((a, s) => a + s.totalUsers, 0);
   const needAttention = lines.filter((l) => l.matchStatus === "unmatched").length;
 
   const TABS: { id: Tab; label: string }[] = [
@@ -312,6 +314,8 @@ export default function SettlementPage() {
               activePublisher,
               setActivePublisher,
               grandTotal,
+              settledTypes,
+              totalRegistrations,
               needAttention,
               exportCsv,
               save,
@@ -409,7 +413,8 @@ function SettlementTab(p: any) {
         {p.lines.length > 0 ? (
           <>
             전체 합계 <b className="text-[var(--ink)]">{won(p.grandTotal)}</b>
-            {" · "}교재 {p.lines.length}건
+            {" · "}교재 {p.settledTypes}종
+            {" · "}총 등록 {p.totalRegistrations}건
             {p.needAttention > 0 && (
               <span className="text-[var(--orange)]"> · 확인필요 {p.needAttention}건</span>
             )}
@@ -471,9 +476,9 @@ function SettlementTab(p: any) {
             const prev = Number(p.balances?.[s.publisher] ?? 0);
             const remain = prev - s.totalAmount;
             return (
-              <div key={s.publisher} className="border border-[var(--border-strong)] rounded-md p-3">
+              <div key={s.publisher} className="rounded-lg p-3 bg-[#fafafa] border border-[#d1d5db] border-l-4 border-l-[var(--orange)] shadow-sm">
                 <div className="flex items-center justify-between">
-                  <span className="text-[13px] font-medium">{s.publisher}</span>
+                  <span className="text-[14px] font-semibold text-[var(--ink)]">{s.publisher}</span>
                   <span className="flex items-center gap-2">
                     {PUBLISHER_FOLDER[s.publisher] && (
                       <a href={PUBLISHER_FOLDER[s.publisher]} target="_blank" rel="noreferrer"
