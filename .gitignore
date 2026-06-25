@@ -6,3 +6,6 @@ node_modules
 .DS_Store
 /coverage
 next-env.d.ts
+
+# TypeScript incremental build info
+*.tsbuildinfo
