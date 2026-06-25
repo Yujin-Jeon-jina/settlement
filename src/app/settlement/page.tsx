@@ -24,6 +24,22 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
   unauthorized: { label: "미허가", color: "var(--purple)" },
 };
 
+// 드라이브 바로가기 (고정 ID)
+const DRIVE = {
+  publishersRoot: "https://drive.google.com/drive/folders/1apAeN4WDIQlXmfkEtQx5nzfBj5hH_5gr",
+  ipList: "https://docs.google.com/spreadsheets/d/1xrC3seWM8FH-MnpvE06shsbKKZOcAoIprIpboOiKQos",
+  bookips: "https://docs.google.com/spreadsheets/d/1xtT0DcS8A3lGCSZPcpvggo4pzZhmF2w1QWeIEo_BNVU",
+  summary: "https://docs.google.com/spreadsheets/d/1u18mFtPXz84Yx0vgyu4w0RvxVf2lL0CF_Cz0PCYHdcw",
+};
+const PUBLISHER_FOLDER: Record<string, string> = {
+  개념원리: "https://drive.google.com/drive/folders/1LvoTT3pwBagRi7y_uLuAz2_UPAthFyRF",
+  쎄듀: "https://drive.google.com/drive/folders/1K6XTOrIXurRc32MgOykm-crmakGnGPg4",
+  마더텅: "https://drive.google.com/drive/folders/1xj0TwlFyTyLup7W_CIFKlvNFTRNcgw_q",
+  키출판사: "https://drive.google.com/drive/folders/1yl16gW8F4V4At44T3MuIiZ-sLkI11zC3",
+  NE능률: "https://drive.google.com/drive/folders/1zM2F93lcubgimfH0o1TgkofmarAPMCOO",
+  지학사: "https://drive.google.com/drive/folders/16RGGmgLy4blgiSYl2YnlXeAKF8R9k-x0",
+};
+
 type Tab = "settlement" | "contracts" | "mapping" | "history";
 
 export default function SettlementPage() {
@@ -379,8 +395,17 @@ function SettlementTab(p: any) {
 
   return (
     <>
+      {/* 드라이브 바로가기 */}
+      <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]">
+        <span className="text-[var(--muted)]">바로가기:</span>
+        <a href={DRIVE.ipList} target="_blank" rel="noreferrer" className="text-[var(--blue)] underline">계약목록(IP LIST)</a>
+        <a href={DRIVE.bookips} target="_blank" rel="noreferrer" className="text-[var(--blue)] underline">bookips(Pivot)</a>
+        <a href={DRIVE.summary} target="_blank" rel="noreferrer" className="text-[var(--blue)] underline">쏠북 Summary</a>
+        <a href={DRIVE.publishersRoot} target="_blank" rel="noreferrer" className="text-[var(--blue)] underline">출판사 폴더</a>
+      </div>
+
       {/* 요약 한 줄 */}
-      <div className="mt-4 text-[12px] text-[var(--muted)]">
+      <div className="mt-3 text-[12px] text-[var(--muted)]">
         {p.lines.length > 0 ? (
           <>
             전체 합계 <b className="text-[var(--ink)]">{won(p.grandTotal)}</b>
@@ -449,8 +474,14 @@ function SettlementTab(p: any) {
               <div key={s.publisher} className="border border-[var(--border-strong)] rounded-md p-3">
                 <div className="flex items-center justify-between">
                   <span className="text-[13px] font-medium">{s.publisher}</span>
-                  <button onClick={() => exportPublisherSheet(s.publisher)}
-                    className="text-[11px] text-[var(--blue)] underline">⬇ 시트 CSV</button>
+                  <span className="flex items-center gap-2">
+                    {PUBLISHER_FOLDER[s.publisher] && (
+                      <a href={PUBLISHER_FOLDER[s.publisher]} target="_blank" rel="noreferrer"
+                        className="text-[11px] text-[var(--blue)] underline">📁 폴더</a>
+                    )}
+                    <button onClick={() => exportPublisherSheet(s.publisher)}
+                      className="text-[11px] text-[var(--blue)] underline">⬇ 시트 CSV</button>
+                  </span>
                 </div>
                 <div className="text-[18px] font-bold text-[var(--ink)] mt-1">{won(s.totalAmount)}</div>
                 <div className="text-[11px] text-[var(--muted)]">
