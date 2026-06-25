@@ -48,7 +48,10 @@ export default function SettlementPage() {
     fetch("/api/balances").then((r) => r.json()).then((j) => setBalances(j.balances || {})).catch(() => {});
   }, []);
 
-  function setBalance(publisher: string, prevBalance: number) {
+  function setBalanceLocal(publisher: string, prevBalance: number) {
+    setBalances((prev) => ({ ...prev, [publisher]: prevBalance }));
+  }
+  function saveBalance(publisher: string, prevBalance: number) {
     setBalances((prev) => ({ ...prev, [publisher]: prevBalance }));
     fetch("/api/balances", {
       method: "PUT",
@@ -304,7 +307,8 @@ export default function SettlementPage() {
               lookupIsbn,
               manualMatch,
               balances,
-              setBalance,
+              setBalanceLocal,
+              saveBalance,
             }}
           />
         )}
@@ -450,16 +454,22 @@ function SettlementTab(p: any) {
                     <input
                       type="text"
                       inputMode="numeric"
-                      defaultValue={prev ? prev.toLocaleString() : ""}
-                      onBlur={(e) => p.setBalance(s.publisher, Number(e.target.value.replace(/[^0-9-]/g, "")) || 0)}
+                      value={p.balances?.[s.publisher] != null ? Number(p.balances[s.publisher]).toLocaleString() : ""}
+                      onChange={(e) => p.setBalanceLocal(s.publisher, Number(e.target.value.replace(/[^0-9-]/g, "")) || 0)}
+                      onBlur={(e) => p.saveBalance(s.publisher, Number(e.target.value.replace(/[^0-9-]/g, "")) || 0)}
                       placeholder="입력"
                       className="w-28 border border-[var(--border)] rounded px-2 py-0.5 text-right mono"
                     />
                   </label>
                   <div className="flex items-center justify-between">
                     <span className="text-[var(--muted)]">잔여금액</span>
-                    <span className="mono font-medium" style={{ color: remain < 0 ? "var(--red)" : "var(--ink)" }}>
-                      {remain.toLocaleString()}원
+                    <span className="flex items-center gap-2">
+                      <span className="mono font-medium" style={{ color: remain < 0 ? "var(--red)" : "var(--ink)" }}>
+                        {remain.toLocaleString()}원
+                      </span>
+                      <button onClick={() => p.saveBalance(s.publisher, remain)}
+                        title="이 잔여금액을 다음 달 전월잔액으로 저장"
+                        className="text-[10px] text-[var(--blue)] underline">이월</button>
                     </span>
                   </div>
                 </div>
