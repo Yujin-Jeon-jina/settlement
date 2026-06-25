@@ -311,6 +311,40 @@ function SettlementTab(p: any) {
   const rows = all.filter((l) => (view === "all" ? true : view === "settle" ? isSettled(l) : isUnauth(l)));
   const settleCount = all.filter(isSettled).length;
   const unauthCount = all.filter(isUnauth).length;
+
+  // 출판사별 정산 시트 CSV (출판사 폴더 시트 양식: 정산기간/출판사/isbn/교재명/등록교재수/정가/정산금액 + 합계)
+  function exportPublisherSheet(publisher: string) {
+    const period = (p.startDate || "").slice(0, 7); // YYYY-MM
+    const lines = (p.lines as SettlementLineDraft[])
+      .filter((l) => l.publisher === publisher && (l.matchStatus === "auto" || l.matchStatus === "confirmed") && l.amount > 0)
+      .sort((a, b) => b.userCount - a.userCount);
+    const cell = (v: any) => {
+      const s = String(v ?? "");
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = ["정산 기간", "출판사", "isbn", "교재명", "등록 교재 수", "교재 정가", "정산 금액"];
+    const body = lines.map((l, i) => [
+      i === 0 ? period : "",
+      publisher,
+      l.contractIsbn || l.usedIsbn,
+      l.contractBookName || l.bookName,
+      l.userCount,
+      l.unitPrice,
+      l.amount,
+    ]);
+    const totalCount = lines.reduce((a, l) => a + l.userCount, 0);
+    const totalAmount = lines.reduce((a, l) => a + l.amount, 0);
+    const sumRow = ["", "", "", "합계", totalCount, "", totalAmount];
+    const csv = "﻿" + [header, ...body, sumRow].map((r) => r.map(cell).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${period}_${publisher}_정산.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <>
       {/* 요약 한 줄 */}
@@ -370,6 +404,23 @@ function SettlementTab(p: any) {
               </button>
             );
           })}
+        </div>
+      )}
+
+      {/* 출판사별 정산금액 + 시트 CSV */}
+      {p.summary.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-4">
+          {p.summary.map((s: PublisherSummary) => (
+            <div key={s.publisher} className="border border-[var(--border-strong)] rounded-md p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[13px] font-medium">{s.publisher}</span>
+                <button onClick={() => exportPublisherSheet(s.publisher)}
+                  className="text-[11px] text-[var(--blue)] underline">⬇ 시트 CSV</button>
+              </div>
+              <div className="text-[18px] font-bold text-[var(--ink)] mt-1">{won(s.totalAmount)}</div>
+              <div className="text-[11px] text-[var(--muted)]">정산 {s.lineCount - s.unauthorizedAmount}건 · 확인필요/미허가 {s.unauthorizedAmount}건</div>
+            </div>
+          ))}
         </div>
       )}
 
