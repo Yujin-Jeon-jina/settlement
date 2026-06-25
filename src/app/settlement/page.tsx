@@ -324,6 +324,12 @@ export default function SettlementPage() {
 /* ───────────────── 정산 탭 ───────────────── */
 function SettlementTab(p: any) {
   const [view, setView] = useState<"all" | "settle" | "unauth">("all");
+  const [savedPub, setSavedPub] = useState<string | null>(null);
+  const doSaveBalance = (publisher: string, value: number) => {
+    p.saveBalance(publisher, value);
+    setSavedPub(publisher);
+    setTimeout(() => setSavedPub((cur) => (cur === publisher ? null : cur)), 1500);
+  };
   const all = p.visibleLines as SettlementLineDraft[];
   const isSettled = (l: SettlementLineDraft) => l.matchStatus === "auto" || l.matchStatus === "confirmed";
   const isUnauth = (l: SettlementLineDraft) => l.matchStatus === "unauthorized" || l.matchStatus === "unmatched";
@@ -452,26 +458,36 @@ function SettlementTab(p: any) {
                 </div>
 
                 <div className="mt-2 pt-2 border-t border-[var(--border)] text-[12px] space-y-1">
-                  <label className="flex items-center justify-between gap-2">
+                  <div className="flex items-center justify-between gap-2">
                     <span className="text-[var(--muted)]">전월 MG 잔액</span>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={p.balances?.[s.publisher] != null ? Number(p.balances[s.publisher]).toLocaleString() : ""}
-                      onChange={(e) => p.setBalanceLocal(s.publisher, Number(e.target.value.replace(/[^0-9-]/g, "")) || 0)}
-                      onBlur={(e) => p.saveBalance(s.publisher, Number(e.target.value.replace(/[^0-9-]/g, "")) || 0)}
-                      placeholder="입력"
-                      className="w-28 border border-[var(--border)] rounded px-2 py-0.5 text-right mono"
-                    />
-                  </label>
+                    <span className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={p.balances?.[s.publisher] != null ? Number(p.balances[s.publisher]).toLocaleString() : ""}
+                        onChange={(e) => p.setBalanceLocal(s.publisher, Number(e.target.value.replace(/[^0-9-]/g, "")) || 0)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") doSaveBalance(s.publisher, Number((e.target as HTMLInputElement).value.replace(/[^0-9-]/g, "")) || 0);
+                        }}
+                        placeholder="입력"
+                        className="w-24 border border-[var(--border)] rounded px-2 py-0.5 text-right mono"
+                      />
+                      <button
+                        onClick={() => doSaveBalance(s.publisher, Number(p.balances?.[s.publisher] ?? 0))}
+                        className="text-[11px] px-1.5 py-0.5 rounded border border-[var(--border-strong)] text-[var(--text)]">
+                        저장
+                      </button>
+                      {savedPub === s.publisher && <span className="text-[11px] text-[var(--teal)]">✓</span>}
+                    </span>
+                  </div>
                   <div className="flex items-center justify-between">
                     <span className="text-[var(--muted)]">잔여금액</span>
                     <span className="flex items-center gap-2">
                       <span className="mono font-medium" style={{ color: remain < 0 ? "var(--red)" : "var(--ink)" }}>
                         {remain.toLocaleString()}원
                       </span>
-                      <button onClick={() => p.saveBalance(s.publisher, remain)}
-                        title="이 잔여금액을 다음 달 전월잔액으로 저장"
+                      <button onClick={() => doSaveBalance(s.publisher, remain)}
+                        title="이 잔여금액을 다음 달 전월잔액으로 저장(이월)"
                         className="text-[10px] text-[var(--blue)] underline">이월</button>
                     </span>
                   </div>
