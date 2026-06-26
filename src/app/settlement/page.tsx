@@ -476,12 +476,8 @@ function SettlementTab(p: any) {
           />
         </label>
 
-        {/* 보조 경로: 라이브 BigQuery 조회 (자격증명 있을 때만) */}
-        <button onClick={p.load} disabled={p.loading}
-          title="BigQuery 직접 조회 (조직 정책상 토큰이 만료되면 실패할 수 있음)"
-          className="rounded-md px-3 py-1.5 text-[13px] border border-[var(--border-strong)] text-[var(--muted)] disabled:opacity-60">
-          라이브 조회
-        </button>
+        {/* 라이브 BigQuery 조회는 토큰 만료(invalid_rapt)가 잦아 UI에서 숨김.
+            필요 시 p.load 로 재노출 가능. 기본 경로는 CSV 업로드. */}
 
         {p.lines.length > 0 && (
           <div className="ml-auto flex items-center gap-2">
