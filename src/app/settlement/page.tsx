@@ -101,6 +101,27 @@ export default function SettlementPage() {
     setActivePublisher("전체");
   }
 
+  // BigQuery에서 내보낸 사용량 CSV 업로드 → 서버에서 매칭/요약 (토큰 만료 없음)
+  async function loadCsv(csv: string) {
+    setLoading(true);
+    setError("");
+    setSavedMsg("");
+    const res = await fetch("/api/usage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ csv }),
+    });
+    setLoading(false);
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      setError(j.error || "CSV 불러오기 실패");
+      return;
+    }
+    const j = await res.json();
+    setLines(j.lines);
+    setActivePublisher("전체");
+  }
+
   function updateLine(usedIsbn: string, patch: Partial<SettlementLineDraft>) {
     setLines((prev) => prev.map((l) => (l.usedIsbn === usedIsbn ? { ...l, ...patch } : l)));
   }
@@ -304,6 +325,7 @@ export default function SettlementPage() {
               setStartDate,
               setEndDate,
               load,
+              loadCsv,
               loading,
               error,
               savedMsg,
@@ -425,16 +447,42 @@ function SettlementTab(p: any) {
       </div>
 
       {/* 정산월 + 액션 */}
-      <div className="flex items-center gap-2 mt-3">
+      <div className="flex flex-wrap items-center gap-2 mt-3">
         <input type="date" value={p.startDate} onChange={(e: any) => p.setStartDate(e.target.value)}
           className="border border-[var(--border-strong)] rounded-md px-2.5 py-1.5 text-[13px]" />
         <span className="text-[var(--muted)]">~</span>
         <input type="date" value={p.endDate} onChange={(e: any) => p.setEndDate(e.target.value)}
           className="border border-[var(--border-strong)] rounded-md px-2.5 py-1.5 text-[13px]" />
+
+        {/* 기본 경로: BigQuery 결과 CSV 업로드 (서버 인증 불필요 → 토큰 만료 없음) */}
+        <label className={[
+          "rounded-md px-3.5 py-1.5 text-[13px] font-medium cursor-pointer",
+          p.loading ? "bg-[var(--ink)] opacity-60 text-white" : "bg-[var(--ink)] text-white",
+        ].join(" ")}>
+          {p.loading ? "처리 중…" : "사용량 CSV 업로드"}
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            disabled={p.loading}
+            onChange={(e: any) => {
+              const f = e.target.files?.[0];
+              if (!f) return;
+              const reader = new FileReader();
+              reader.onload = () => { p.loadCsv(String(reader.result || "")); };
+              reader.readAsText(f, "utf-8");
+              e.target.value = ""; // 같은 파일 재선택 허용
+            }}
+          />
+        </label>
+
+        {/* 보조 경로: 라이브 BigQuery 조회 (자격증명 있을 때만) */}
         <button onClick={p.load} disabled={p.loading}
-          className="rounded-md px-3.5 py-1.5 text-[13px] font-medium bg-[var(--ink)] text-white disabled:opacity-60">
-          {p.loading ? "집계 중…" : "사용량 불러오기"}
+          title="BigQuery 직접 조회 (조직 정책상 토큰이 만료되면 실패할 수 있음)"
+          className="rounded-md px-3 py-1.5 text-[13px] border border-[var(--border-strong)] text-[var(--muted)] disabled:opacity-60">
+          라이브 조회
         </button>
+
         {p.lines.length > 0 && (
           <div className="ml-auto flex items-center gap-2">
             <button onClick={p.save}
@@ -444,6 +492,13 @@ function SettlementTab(p: any) {
             <button onClick={p.exportCsv} className="text-[13px] text-[var(--blue)] font-medium">⬇ CSV</button>
           </div>
         )}
+      </div>
+
+      {/* CSV 업로드 안내 */}
+      <div className="mt-2 text-[11px] text-[var(--muted)]">
+        BigQuery 콘솔에서 <code className="text-[var(--text)]">scripts/usage_export.sql</code>(정산월로 날짜 수정) 실행 →
+        결과를 <b className="text-[var(--text)]">CSV 다운로드</b> 후 위 <b className="text-[var(--text)]">사용량 CSV 업로드</b>로 올리세요.
+        필요한 컬럼: publisher · usedIsbn · bookName · userCount · unitPrice · status.
       </div>
 
       {p.error && <Banner color="var(--red)">{p.error}</Banner>}

@@ -42,9 +42,15 @@ npm run dev               # http://localhost:3000
 
 1. **로그인** — `SETTLEMENT_PASSWORD` 입력 시에만 접근 (쿠키 세션).
 2. **계약목록 등록(계약목록 탭)** — IP LIST를 **CSV로 업로드**(Postgres 저장). 정산 기준 + 단가.
-3. **정산월 선택 → 사용량 불러오기** — BigQuery에서 집계.
+3. **사용량 올리기** — 두 가지 경로:
+   - **(기본) 사용량 CSV 업로드** — BigQuery 콘솔에서 `scripts/usage_export.sql`(정산월로 날짜 수정) 실행 →
+     결과를 CSV로 다운로드 → "사용량 CSV 업로드" 버튼으로 올림. **서버측 Google 인증이 없어 토큰 만료(invalid_rapt) 안 남.**
+     조직 정책상 서비스계정 불가 + OAuth 재인증이 잦아 이 방식을 기본으로 사용.
+   - (보조) **라이브 조회** — BigQuery 직접 조회. 자격증명/토큰이 살아있을 때만 동작(조직 재인증 시 실패 가능).
    - 기준: `registered_at`이 정산월 안 + `deleted_at IS NULL`(삭제분 제외), 등록 사용자수.
-   - 단가/승인여부: `book_contracts`(consumer_price는 참고, **단가는 IP LIST bookPrice**, 승인 = `status=ALLOWED`).
+   - CSV 헤더(한/영 별칭 허용): `publisher · usedIsbn(isbn) · bookName · userCount · unitPrice · status`.
+     원시 로그(userHash 포함)도 업로드 가능 → publisher+isbn별 COUNT(DISTINCT userHash)로 자동 집계.
+   - 단가/승인여부: **단가는 IP LIST bookPrice**, 승인 = `book_contracts.status=ALLOWED`.
 4. **매칭** — 사용 교재 ↔ 계약 교재(IP LIST) 나란히 표시:
    - IP LIST ISBN 정확일치 + ALLOWED → 자동매칭.
    - 개정판 등: **알라딘 조회 / 계약목록 직접검색 / 직접입력 / 미허가**.
