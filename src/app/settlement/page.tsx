@@ -9,8 +9,11 @@ const won = (n: number) => n.toLocaleString("ko-KR") + "원";
 
 function defaultMonthRange() {
   const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1); // 당월 1일
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0); // 당월 말일
+  // 매월 1~5일은 '지난달' 정산 기간으로 기본 설정(초순엔 전월분 정산이라 헷갈림 방지),
+  // 6일부터는 당월 1일~말일.
+  const monthOffset = now.getDate() <= 5 ? -1 : 0;
+  const start = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1); // 대상월 1일
+  const end = new Date(now.getFullYear(), now.getMonth() + monthOffset + 1, 0); // 대상월 말일
   // 로컬 날짜 그대로 포맷 (toISOString의 UTC 변환으로 하루 밀리는 문제 방지)
   const fmt = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
