@@ -18,6 +18,29 @@ function activeStatuses(): Set<string> {
   return new Set(raw.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean));
 }
 
+/** 명시적 '미승인(정산 제외)'으로 볼 status 값 집합 (기본 DENIED, EXPIRED) */
+function deniedStatuses(): Set<string> {
+  const raw = process.env.CONTRACT_DENIED_STATUSES || "DENIED,EXPIRED,REJECT";
+  return new Set(raw.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean));
+}
+
+/**
+ * IP LIST가 계약 마스터이므로, ISBN이 IP LIST에 있으면 정산 대상으로 본다.
+ * status는 '있을 때만' 참고해 명시적 DENIED/EXPIRED만 제외한다(피봇 복사 CSV처럼
+ * status 컬럼이 없어도 정산되도록). 예전처럼 status=ALLOWED를 강제하려면
+ * env CONTRACT_REQUIRE_ALLOWED=true 로 되돌릴 수 있다.
+ */
+function requireAllowed(): boolean {
+  return String(process.env.CONTRACT_REQUIRE_ALLOWED || "").toLowerCase() === "true";
+}
+
+/** 이 사용행이 계약 승인 상태인지 (IP LIST 존재는 호출부에서 별도 확인) */
+function isApproved(status: string | null | undefined): boolean {
+  const s = (status || "").toUpperCase();
+  if (requireAllowed()) return activeStatuses().has(s);
+  return !deniedStatuses().has(s); // 빈값/ALLOWED/기타 → 승인, DENIED/EXPIRED만 제외
+}
+
 /**
  * 사용량 + 계약목록 + 저장된 확정매핑을 결합해 정산 라인 초안을 만든다.
  * 우선순위: 저장매핑 → book_contracts status=ALLOWED(auto) → 계약목록 ISBN 정확일치(auto)
@@ -30,12 +53,11 @@ export function buildSettlementDraft(
 ): SettlementLineDraft[] {
   const contractByIsbn = new Map(contracts.map((c) => [c.isbn, c]));
   const storedByUsed = new Map(stored.map((m) => [m.usedIsbn, m]));
-  const active = activeStatuses();
 
   return usage.map((u) => {
     const bookName = u.bookName || u.usedIsbn;
     const publisher = u.publisher || "(미상)";
-    const approved = active.has((u.status || "").toUpperCase()); // book_contracts 승인여부
+    const approved = isApproved(u.status); // 명시적 DENIED/EXPIRED만 제외(기본)
     const base = {
       usedIsbn: u.usedIsbn,
       publisher,
@@ -63,7 +85,7 @@ export function buildSettlementDraft(
       };
     }
 
-    // 2) 정산 대상 = IP LIST에 ISBN 정확 매칭 AND book_contracts 승인(ALLOWED)
+    // 2) 정산 대상 = IP LIST(계약 마스터)에 ISBN 정확 매칭. status가 명시적 DENIED/EXPIRED면 제외.
     const exact = contractByIsbn.get(u.usedIsbn);
     if (exact && approved) {
       const price = exact.bookPrice; // 단가 = IP LIST bookPrice
