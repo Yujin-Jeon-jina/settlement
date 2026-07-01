@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import type { PublisherSummary, SettlementLineDraft } from "@/lib/types";
@@ -70,13 +70,23 @@ export default function SettlementPage() {
   function setBalanceLocal(publisher: string, prevBalance: number) {
     setBalances((prev) => ({ ...prev, [publisher]: prevBalance }));
   }
-  function saveBalance(publisher: string, prevBalance: number) {
+  async function saveBalance(publisher: string, prevBalance: number) {
     setBalances((prev) => ({ ...prev, [publisher]: prevBalance }));
-    fetch("/api/balances", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ publisher, prevBalance }),
-    }).catch(() => {});
+    try {
+      const res = await fetch("/api/balances", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ publisher, prevBalance }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        setError(`잔액 저장 실패 (${publisher}): ${j.error || res.status}`);
+      } else {
+        setError("");
+      }
+    } catch (e) {
+      setError(`잔액 저장 실패 (${publisher}): ${String(e)}`);
+    }
   }
   const contractById = useMemo(() => {
     const m = new Map<string, any>();
@@ -894,36 +904,117 @@ function MappingTab() {
 function HistoryTab() {
   const [runs, setRuns] = useState<any[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<Record<string, any>>({}); // runId -> run(with lines)
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+
   useEffect(() => {
     fetch("/api/settlement").then((r) => r.json()).then((j) => {
       setRuns(j.runs || []);
       setLoaded(true);
     });
   }, []);
+
+  async function toggle(id: string) {
+    if (openId === id) { setOpenId(null); return; }
+    setOpenId(id);
+    if (!detail[id]) {
+      setLoadingId(id);
+      try {
+        const j = await fetch(`/api/settlement/${id}`).then((r) => r.json());
+        if (j.run) setDetail((prev) => ({ ...prev, [id]: j.run }));
+      } finally {
+        setLoadingId(null);
+      }
+    }
+  }
+
   return (
     <div className="mt-5">
       <table className="w-full text-[13px]">
         <thead>
           <tr className="text-left text-[var(--muted)] text-[12px] border-b border-[var(--border-strong)]">
-            <Th>정산기간</Th><Th>상태</Th><Th className="text-right">라인수</Th><Th>생성일시</Th>
+            <Th></Th><Th>정산기간</Th><Th>상태</Th><Th className="text-right">라인수</Th><Th>생성일시</Th>
           </tr>
         </thead>
         <tbody>
-          {runs.map((r) => (
-            <tr key={r.id} className="border-b border-[var(--border)]">
-              <td className="py-3 pr-3 mono text-[12px]">
-                {String(r.periodStart).slice(0, 10)} ~ {String(r.periodEnd).slice(0, 10)}
-              </td>
-              <td className="py-3 pr-3 text-[12px]" style={{ color: "var(--teal)" }}>{r.status}</td>
-              <td className="py-3 pr-3 text-right mono">{r._count?.lines ?? "-"}</td>
-              <td className="py-3 pr-3 mono text-[12px]">{String(r.createdAt).slice(0, 19).replace("T", " ")}</td>
-            </tr>
-          ))}
+          {runs.map((r) => {
+            const d = detail[r.id];
+            const isOpen = openId === r.id;
+            return (
+              <Fragment key={r.id}>
+                <tr onClick={() => toggle(r.id)} className="border-b border-[var(--border)] cursor-pointer hover:bg-[#fafafa]">
+                  <td className="py-3 pr-2 text-[var(--muted)]">{isOpen ? "▾" : "▸"}</td>
+                  <td className="py-3 pr-3 mono text-[12px]">
+                    {String(r.periodStart).slice(0, 10)} ~ {String(r.periodEnd).slice(0, 10)}
+                  </td>
+                  <td className="py-3 pr-3 text-[12px]" style={{ color: "var(--teal)" }}>{r.status}</td>
+                  <td className="py-3 pr-3 text-right mono">{r._count?.lines ?? "-"}</td>
+                  <td className="py-3 pr-3 mono text-[12px]">{String(r.createdAt).slice(0, 19).replace("T", " ")}</td>
+                </tr>
+                {isOpen && (
+                  <tr className="border-b border-[var(--border)]">
+                    <td colSpan={5} className="bg-[#fafafa] px-3 py-3">
+                      {loadingId === r.id && <div className="text-[12px] text-[var(--muted)]">불러오는 중…</div>}
+                      {d && <RunDetail run={d} />}
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            );
+          })}
         </tbody>
       </table>
       {loaded && runs.length === 0 && (
         <div className="text-center text-[var(--muted)] py-16 text-[13px]">저장된 정산 이력이 없습니다.</div>
       )}
+    </div>
+  );
+}
+
+/** 이력 1건의 라인 상세 (출판사별 소계 + 전체 라인 표) */
+function RunDetail({ run }: { run: any }) {
+  const lines: any[] = run.lines || [];
+  const byPub = new Map<string, { amount: number; count: number; users: number }>();
+  for (const l of lines) {
+    const settled = l.matchStatus === "auto" || l.matchStatus === "confirmed";
+    const s = byPub.get(l.publisher) ?? { amount: 0, count: 0, users: 0 };
+    s.amount += l.amount; s.count += 1; if (settled) s.users += l.userCount;
+    byPub.set(l.publisher, s);
+  }
+  const total = lines.reduce((a, l) => a + l.amount, 0);
+  return (
+    <div>
+      <div className="flex flex-wrap gap-2 mb-3">
+        {Array.from(byPub.entries()).map(([pub, s]) => (
+          <span key={pub} className="text-[12px] border border-[var(--border-strong)] rounded-md px-2 py-1">
+            <b>{pub}</b> {s.amount.toLocaleString()}원 · {s.users}건
+          </span>
+        ))}
+        <span className="text-[12px] rounded-md px-2 py-1 bg-[var(--ink)] text-white">전체 {total.toLocaleString()}원</span>
+      </div>
+      <table className="w-full text-[12px]">
+        <thead>
+          <tr className="text-left text-[var(--muted)] border-b border-[var(--border)]">
+            <Th>출판사</Th><Th>교재명</Th><Th>사용ISBN</Th><Th>계약ISBN</Th>
+            <Th className="text-right">등록</Th><Th className="text-right">단가</Th><Th className="text-right">금액</Th><Th>상태</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {lines.map((l) => (
+            <tr key={l.id} className="border-b border-[var(--border)]">
+              <td className="py-2 pr-3">{l.publisher}</td>
+              <td className="py-2 pr-3">{l.bookName}</td>
+              <td className="py-2 pr-3 mono">{l.usedIsbn}</td>
+              <td className="py-2 pr-3 mono">{l.contractIsbn || "-"}</td>
+              <td className="py-2 pr-3 text-right mono">{l.userCount}</td>
+              <td className="py-2 pr-3 text-right mono">{l.unitPrice.toLocaleString()}</td>
+              <td className="py-2 pr-3 text-right mono">{l.amount.toLocaleString()}</td>
+              <td className="py-2 pr-3">{STATUS_META[l.matchStatus]?.label ?? l.matchStatus}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

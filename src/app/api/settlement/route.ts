@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import type { SettlementLineDraft } from "@/lib/types";
 
+// DB 실시간 반영 필수: Route Handler 응답 캐시 비활성화
+export const dynamic = "force-dynamic";
+
 /** 확정된 정산 라인을 이력으로 저장 */
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as {

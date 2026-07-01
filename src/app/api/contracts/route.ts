@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getContracts, importContractsFromCsv, upsertContract } from "@/lib/contracts";
 
+// DB 실시간 반영 필수: Route Handler 응답 캐시 비활성화
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const contracts = await getContracts();

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { importMappingsFromCsv } from "@/lib/mappings";
 
+// DB 실시간 반영 필수: Route Handler 응답 캐시 비활성화
+export const dynamic = "force-dynamic";
+
 /** 매핑 CSV 일괄 임포트 (사용ISBN, 계약ISBN, [출판사], [교재명]) */
 export async function PUT(req: NextRequest) {
   const { csv } = (await req.json().catch(() => ({}))) as { csv?: string };

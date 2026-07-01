@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
+// DB 실시간 반영 필수: Route Handler 응답 캐시 비활성화(저장 후 즉시 최신값)
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const rows = await prisma.publisherBalance.findMany();
