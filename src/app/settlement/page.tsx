@@ -395,9 +395,28 @@ function SettlementTab(p: any) {
   // 출판사별 정산 시트 CSV (출판사 폴더 시트 양식: 정산기간/출판사/isbn/교재명/등록교재수/정가/정산금액 + 합계)
   function exportPublisherSheet(publisher: string) {
     const period = (p.startDate || "").slice(0, 7); // YYYY-MM
-    const lines = (p.lines as SettlementLineDraft[])
-      .filter((l) => l.publisher === publisher && (l.matchStatus === "auto" || l.matchStatus === "confirmed") && l.amount > 0)
-      .sort((a, b) => b.userCount - a.userCount);
+    const filtered = (p.lines as SettlementLineDraft[])
+      .filter((l) => l.publisher === publisher && (l.matchStatus === "auto" || l.matchStatus === "confirmed") && l.amount > 0);
+    // 구판/신판이 같은 계약 ISBN으로 매칭되면 시트에는 한 줄로 합산 (등록 교재 수·정산 금액 합계)
+    const merged = new Map<string, { isbn: string; bookName: string; userCount: number; unitPrice: number; amount: number }>();
+    for (const l of filtered) {
+      const isbn = l.contractIsbn || l.usedIsbn;
+      const g = merged.get(isbn);
+      if (g) {
+        g.userCount += l.userCount;
+        g.amount += l.amount;
+        if (!g.bookName && (l.contractBookName || l.bookName)) g.bookName = l.contractBookName || l.bookName;
+      } else {
+        merged.set(isbn, {
+          isbn,
+          bookName: l.contractBookName || l.bookName,
+          userCount: l.userCount,
+          unitPrice: l.unitPrice,
+          amount: l.amount,
+        });
+      }
+    }
+    const lines = Array.from(merged.values()).sort((a, b) => b.userCount - a.userCount);
     const cell = (v: any) => {
       const s = String(v ?? "");
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -406,8 +425,8 @@ function SettlementTab(p: any) {
     const body = lines.map((l, i) => [
       i === 0 ? period : "",
       publisher,
-      l.contractIsbn || l.usedIsbn,
-      l.contractBookName || l.bookName,
+      l.isbn,
+      l.bookName,
       l.userCount,
       l.unitPrice,
       l.amount,
